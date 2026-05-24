@@ -94,6 +94,7 @@ impl SettingsApp {
                                 &default_stt,
                                 &stt_models,
                                 recommended_stt.as_deref(),
+                                None,
                                 shared_stt,
                                 self.default_stt_search.clone(),
                                 |config, model, provider| {
@@ -108,6 +109,11 @@ impl SettingsApp {
                                     &default_llm,
                                     &llm_models,
                                     recommended_llm.as_deref(),
+                                    Some(ModelDropdownAction {
+                                        id: "disabled",
+                                        label: "Disabled",
+                                        updater: disable_llm_rewrite,
+                                    }),
                                     shared_llm,
                                     self.default_llm_search.clone(),
                                     |config, model, provider| {

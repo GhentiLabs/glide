@@ -558,11 +558,31 @@ mod tests {
 
     use gpui::{AppContext, TestAppContext, VisualTestContext};
 
-    use crate::config::GlideConfig;
+    use crate::config::{GlideConfig, ModelSelection, Provider};
     use crate::state::SharedAppState;
 
     fn test_shared_state() -> SharedState {
         Arc::new(SharedAppState::new(GlideConfig::default()))
+    }
+
+    #[test]
+    fn test_disable_llm_rewrite_persists_disabled_default() {
+        let shared = test_shared_state();
+        shared
+            .update_config(|config| {
+                config.dictation.llm = Some(ModelSelection {
+                    provider: Provider::OpenAi,
+                    model: "gpt-5.4-nano".to_string(),
+                });
+                config.dictation.smart_defaults_applied = false;
+            })
+            .unwrap();
+
+        shared.update_config(helpers::disable_llm_rewrite).unwrap();
+
+        let config = shared.snapshot().config;
+        assert!(config.dictation.llm.is_none());
+        assert!(config.dictation.smart_defaults_applied);
     }
 
     fn init_and_create_view(cx: &mut TestAppContext) -> (Entity<SettingsApp>, VisualTestContext) {

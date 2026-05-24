@@ -213,11 +213,24 @@ pub(super) fn model_picker_item(
     row
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct ModelDropdownAction {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub updater: fn(&mut GlideConfig),
+}
+
+pub(super) fn disable_llm_rewrite(config: &mut GlideConfig) {
+    config.dictation.llm = None;
+    config.dictation.smart_defaults_applied = true;
+}
+
 pub(super) fn model_dropdown_button(
     id: &str,
     current_model: &str,
     models: &[crate::model_catalog::ModelInfo],
     recommended_model: Option<&str>,
+    action: Option<ModelDropdownAction>,
     shared: SharedState,
     search_entity: Entity<InputState>,
     updater: fn(&mut GlideConfig, String, Provider),
@@ -265,6 +278,33 @@ pub(super) fn model_dropdown_button(
             };
 
             let mut list = div().flex().flex_col().gap_0p5().p_1();
+            if let Some(action) = action {
+                let shared = shared.clone();
+                let popover = popover.clone();
+                list = list.child(
+                    div()
+                        .id(SharedString::from(format!("pick-{}", action.id)))
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(cx.theme().accent.opacity(0.15)))
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(action.label)
+                        .on_click(move |_, window, cx| {
+                            let _ = shared.update_config(|config| {
+                                (action.updater)(config);
+                            });
+                            popover.update(cx, |state, cx| {
+                                state.dismiss(window, cx);
+                            });
+                        }),
+                );
+            }
             for model in &filtered {
                 let is_recommended = recommended.as_deref() == Some(&model.id);
                 let model_id = model.id.clone();
