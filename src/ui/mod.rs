@@ -75,6 +75,7 @@ pub struct SettingsApp {
 
     openai_inputs: ProviderInputs,
     groq_inputs: ProviderInputs,
+    cerebras_inputs: ProviderInputs,
     expanded_provider: Option<usize>,
     apple_speech_search: Entity<InputState>,
     expanded_style: Option<usize>,
@@ -87,6 +88,7 @@ pub struct SettingsApp {
 
     last_fetched_openai_key: String,
     last_fetched_groq_key: String,
+    last_fetched_cerebras_key: String,
 
     save_pending: bool,
 
@@ -131,6 +133,15 @@ impl SettingsApp {
         let groq_base_url =
             cx.new(|cx| InputState::new(window, cx).default_value(&groq_creds.base_url));
 
+        let cerebras_creds = &config.providers.cerebras;
+        let cerebras_api_key = cx.new(|cx| {
+            InputState::new(window, cx)
+                .masked(true)
+                .default_value(&cerebras_creds.api_key)
+        });
+        let cerebras_base_url =
+            cx.new(|cx| InputState::new(window, cx).default_value(&cerebras_creds.base_url));
+
         let default_prompt = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(3, 12)
@@ -148,6 +159,8 @@ impl SettingsApp {
             cx.subscribe_in(&openai_base_url, window, Self::on_input_change),
             cx.subscribe_in(&groq_api_key, window, Self::on_input_change),
             cx.subscribe_in(&groq_base_url, window, Self::on_input_change),
+            cx.subscribe_in(&cerebras_api_key, window, Self::on_input_change),
+            cx.subscribe_in(&cerebras_base_url, window, Self::on_input_change),
             cx.subscribe_in(&default_prompt, window, Self::on_input_change),
         ];
 
@@ -230,6 +243,10 @@ impl SettingsApp {
                 api_key: groq_api_key,
                 base_url: groq_base_url,
             },
+            cerebras_inputs: ProviderInputs {
+                api_key: cerebras_api_key,
+                base_url: cerebras_base_url,
+            },
             expanded_provider: Some(0),
             apple_speech_search,
             expanded_style: Some(0),
@@ -240,6 +257,7 @@ impl SettingsApp {
             styles,
             last_fetched_openai_key: config.providers.openai.api_key.clone(),
             last_fetched_groq_key: config.providers.groq.api_key.clone(),
+            last_fetched_cerebras_key: config.providers.cerebras.api_key.clone(),
             save_pending: false,
             vocabulary_input,
             replacement_find_input,
@@ -316,13 +334,16 @@ impl SettingsApp {
         let draft = self.draft_from_inputs(cx);
         let new_openai_key = draft.providers.openai.api_key.clone();
         let new_groq_key = draft.providers.groq.api_key.clone();
+        let new_cerebras_key = draft.providers.cerebras.api_key.clone();
         let providers_changed = new_openai_key != self.last_fetched_openai_key
-            || new_groq_key != self.last_fetched_groq_key;
+            || new_groq_key != self.last_fetched_groq_key
+            || new_cerebras_key != self.last_fetched_cerebras_key;
         let providers = draft.providers.clone();
         let _ = self.shared.update_config(move |config| *config = draft);
         if providers_changed {
             self.last_fetched_openai_key = new_openai_key;
             self.last_fetched_groq_key = new_groq_key;
+            self.last_fetched_cerebras_key = new_cerebras_key;
             crate::model_catalog::fetch_all_models(&providers);
 
             let shared = self.shared.clone();
@@ -345,6 +366,10 @@ impl SettingsApp {
         config.providers.openai.base_url = self.openai_inputs.base_url.read(cx).value().to_string();
         config.providers.groq.api_key = self.groq_inputs.api_key.read(cx).value().to_string();
         config.providers.groq.base_url = self.groq_inputs.base_url.read(cx).value().to_string();
+        config.providers.cerebras.api_key =
+            self.cerebras_inputs.api_key.read(cx).value().to_string();
+        config.providers.cerebras.base_url =
+            self.cerebras_inputs.base_url.read(cx).value().to_string();
 
         config.dictation.system_prompt = self.default_prompt.read(cx).value().to_string();
 
@@ -570,6 +595,10 @@ mod tests {
                 app.openai_inputs.base_url.read(cx).value().to_string(),
                 defaults.providers.openai.base_url,
             );
+            assert_eq!(
+                app.cerebras_inputs.base_url.read(cx).value().to_string(),
+                defaults.providers.cerebras.base_url,
+            );
         });
     }
 
@@ -606,6 +635,10 @@ mod tests {
             assert_eq!(
                 draft.providers.openai.base_url,
                 defaults.providers.openai.base_url,
+            );
+            assert_eq!(
+                draft.providers.cerebras.base_url,
+                defaults.providers.cerebras.base_url,
             );
             assert_eq!(
                 draft.dictation.system_prompt,

@@ -6,19 +6,27 @@ use serde::{Deserialize, Serialize};
 pub enum Provider {
     OpenAi,
     Groq,
+    Cerebras,
     AppleLocal,
     Parakeet,
 }
 
 impl Provider {
     #[allow(dead_code)]
-    pub const ALL: [Self; 4] = [Self::OpenAi, Self::Groq, Self::AppleLocal, Self::Parakeet];
-    pub const REMOTE: [Self; 2] = [Self::OpenAi, Self::Groq];
+    pub const ALL: [Self; 5] = [
+        Self::OpenAi,
+        Self::Groq,
+        Self::Cerebras,
+        Self::AppleLocal,
+        Self::Parakeet,
+    ];
+    pub const REMOTE: [Self; 3] = [Self::OpenAi, Self::Groq, Self::Cerebras];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::OpenAi => "OpenAI",
             Self::Groq => "Groq",
+            Self::Cerebras => "Cerebras",
             Self::AppleLocal => "Apple Intelligence",
             Self::Parakeet => "Parakeet",
         }
@@ -28,6 +36,7 @@ impl Provider {
         match self {
             Self::OpenAi => "assets/icons/openai.png",
             Self::Groq => "assets/icons/groq.png",
+            Self::Cerebras => "assets/icons/cerebras.png",
             Self::AppleLocal => "assets/icons/apple-intelligence.png",
             Self::Parakeet => "assets/icons/nvidia.png",
         }
@@ -37,6 +46,7 @@ impl Provider {
         match self {
             Self::OpenAi => "https://api.openai.com/v1",
             Self::Groq => "https://api.groq.com/openai/v1",
+            Self::Cerebras => "https://api.cerebras.ai/v1",
             Self::AppleLocal | Self::Parakeet => "",
         }
     }
@@ -57,6 +67,7 @@ impl Provider {
         match s {
             "OpenAI" => Some(Self::OpenAi),
             "Groq" => Some(Self::Groq),
+            "Cerebras" => Some(Self::Cerebras),
             "Apple Local" | "Apple Intelligence" => Some(Self::AppleLocal),
             "Parakeet" => Some(Self::Parakeet),
             _ => None,
@@ -69,6 +80,7 @@ impl Provider {
 pub struct ProvidersConfig {
     pub openai: ProviderCredentials,
     pub groq: ProviderCredentials,
+    pub cerebras: ProviderCredentials,
 }
 
 impl Default for ProvidersConfig {
@@ -82,6 +94,10 @@ impl Default for ProvidersConfig {
                 api_key: String::new(),
                 base_url: Provider::Groq.default_base_url().to_string(),
             },
+            cerebras: ProviderCredentials {
+                api_key: String::new(),
+                base_url: Provider::Cerebras.default_base_url().to_string(),
+            },
         }
     }
 }
@@ -91,6 +107,7 @@ impl ProvidersConfig {
         match provider {
             Provider::OpenAi => &self.openai,
             Provider::Groq => &self.groq,
+            Provider::Cerebras => &self.cerebras,
             Provider::AppleLocal | Provider::Parakeet => {
                 panic!("local providers do not use API credentials")
             }

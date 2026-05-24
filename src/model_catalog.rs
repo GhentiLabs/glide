@@ -16,12 +16,13 @@ pub struct ModelInfo {
 
 static CACHED_STT_MODELS: OnceLock<Mutex<Vec<ModelInfo>>> = OnceLock::new();
 static CACHED_LLM_MODELS: OnceLock<Mutex<Vec<ModelInfo>>> = OnceLock::new();
-pub(crate) static PROVIDER_VERIFIED: OnceLock<Mutex<[bool; 2]>> = OnceLock::new();
+pub(crate) static PROVIDER_VERIFIED: OnceLock<Mutex<[bool; 3]>> = OnceLock::new();
 
 fn provider_verified_index(provider: Provider) -> Option<usize> {
     match provider {
         Provider::OpenAi => Some(0),
         Provider::Groq => Some(1),
+        Provider::Cerebras => Some(2),
         Provider::AppleLocal | Provider::Parakeet => None,
     }
 }
@@ -46,11 +47,12 @@ fn apple_foundation_available() -> bool {
 }
 
 pub fn provider_verified(provider: Provider) -> bool {
-    let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 2]));
+    let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 3]));
     let locked = cache.lock().unwrap();
     match provider {
         Provider::OpenAi => locked[0],
         Provider::Groq => locked[1],
+        Provider::Cerebras => locked[2],
         Provider::AppleLocal => apple_speech_available() || apple_foundation_available(),
         Provider::Parakeet => local_models::parakeet_models_status()
             .iter()
@@ -65,6 +67,7 @@ pub fn any_provider_verified() -> bool {
 fn stt_selection_available(selection: &ModelSelection) -> bool {
     match selection.provider {
         Provider::OpenAi | Provider::Groq => provider_verified(selection.provider),
+        Provider::Cerebras => false,
         Provider::AppleLocal => local_models::resolve_apple_speech_model_id(&selection.model)
             .map(|model_id| {
                 local_models::apple_speech_install_state(&model_id)
@@ -80,7 +83,9 @@ fn stt_selection_available(selection: &ModelSelection) -> bool {
 
 fn llm_selection_available(selection: &ModelSelection) -> bool {
     match selection.provider {
-        Provider::OpenAi | Provider::Groq => provider_verified(selection.provider),
+        Provider::OpenAi | Provider::Groq | Provider::Cerebras => {
+            provider_verified(selection.provider)
+        }
         Provider::AppleLocal => {
             local_models::resolve_apple_foundation_model_id(&selection.model).is_some()
         }
@@ -127,6 +132,11 @@ pub fn smart_llm_default() -> Option<ModelSelection> {
         Some(ModelSelection {
             provider: Provider::OpenAi,
             model: "gpt-5.4-nano".to_string(),
+        })
+    } else if provider_verified(Provider::Cerebras) {
+        Some(ModelSelection {
+            provider: Provider::Cerebras,
+            model: "gpt-oss-120b".to_string(),
         })
     } else if let Some(model) = local_models::first_available_apple_foundation_model() {
         Some(ModelSelection {
@@ -227,6 +237,13 @@ fn fallback_llm_models() -> Vec<ModelInfo> {
         model_info(Provider::Groq, "llama-3.3-70b-versatile", false, false),
         model_info(Provider::Groq, "llama-3.1-8b-instant", false, false),
         model_info(Provider::Groq, "mixtral-8x7b-32768", false, false),
+        model_info(Provider::Cerebras, "gpt-oss-120b", false, false),
+        model_info(
+            Provider::Cerebras,
+            "llama-4-scout-17b-16e-instruct",
+            false,
+            false,
+        ),
     ];
     let mut all = all;
     all.extend(apple_foundation_model_infos());
@@ -403,14 +420,19 @@ struct ModelsResponseEntry {
 pub fn fetch_all_models(providers: &ProvidersConfig) {
     let openai = providers.openai.clone();
     let groq = providers.groq.clone();
+    let cerebras = providers.cerebras.clone();
 
     std::thread::spawn(move || {
         let client = reqwest::blocking::Client::new();
         let mut stt = Vec::new();
         let mut llm = Vec::new();
 
-        for (provider, creds) in [(Provider::OpenAi, &openai), (Provider::Groq, &groq)] {
-            let verified_cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 2]));
+        for (provider, creds) in [
+            (Provider::OpenAi, &openai),
+            (Provider::Groq, &groq),
+            (Provider::Cerebras, &cerebras),
+        ] {
+            let verified_cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 3]));
             let idx = provider_verified_index(provider).expect("remote provider has an index");
 
             if creds.api_key.trim().is_empty() || creds.base_url.trim().is_empty() {
@@ -449,7 +471,9 @@ pub fn fetch_all_models(providers: &ProvidersConfig) {
                     };
 
                     if is_stt {
-                        stt.push(info);
+                        if provider != Provider::Cerebras {
+                            stt.push(info);
+                        }
                     } else if !excluded_remote_llm_model(provider, &id_lower) {
                         llm.push(info);
                     }
@@ -483,29 +507,35 @@ mod tests {
     static PROVIDER_LOCK: Mutex<()> = Mutex::new(());
 
     fn set_provider_verified(provider: Provider, verified: bool) {
-        let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 2]));
+        let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 3]));
         let mut locked = cache.lock().unwrap();
         match provider {
             Provider::OpenAi => locked[0] = verified,
             Provider::Groq => locked[1] = verified,
+            Provider::Cerebras => locked[2] = verified,
             Provider::AppleLocal | Provider::Parakeet => {}
         }
     }
 
     fn reset_providers_verified() {
-        let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 2]));
+        let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 3]));
         let mut locked = cache.lock().unwrap();
-        *locked = [false; 2];
+        *locked = [false; 3];
     }
 
     #[test]
     fn test_provider_variants() {
-        assert_eq!(Provider::ALL.len(), 4);
+        assert_eq!(Provider::ALL.len(), 5);
         assert_eq!(Provider::OpenAi.label(), "OpenAI");
         assert_eq!(Provider::Groq.label(), "Groq");
+        assert_eq!(Provider::Cerebras.label(), "Cerebras");
         assert_eq!(Provider::AppleLocal.label(), "Apple Intelligence");
         assert_eq!(Provider::Parakeet.label(), "Parakeet");
         assert!(!Provider::OpenAi.default_base_url().is_empty());
+        assert_eq!(
+            Provider::Cerebras.default_base_url(),
+            "https://api.cerebras.ai/v1"
+        );
         assert!(Provider::AppleLocal.default_base_url().is_empty());
     }
 
@@ -546,6 +576,15 @@ mod tests {
         let _g = PROVIDER_LOCK.lock().unwrap();
         reset_providers_verified();
         set_provider_verified(Provider::Groq, true);
+        assert!(any_provider_verified());
+        reset_providers_verified();
+    }
+
+    #[test]
+    fn test_any_provider_verified_cerebras() {
+        let _g = PROVIDER_LOCK.lock().unwrap();
+        reset_providers_verified();
+        set_provider_verified(Provider::Cerebras, true);
         assert!(any_provider_verified());
         reset_providers_verified();
     }
@@ -621,6 +660,17 @@ mod tests {
         let sel = smart_llm_default().unwrap();
         assert_eq!(sel.provider, Provider::Groq);
         assert_eq!(sel.model, "meta-llama/llama-4-scout-17b-16e-instruct");
+        reset_providers_verified();
+    }
+
+    #[test]
+    fn test_smart_llm_default_cerebras_only() {
+        let _g = PROVIDER_LOCK.lock().unwrap();
+        reset_providers_verified();
+        set_provider_verified(Provider::Cerebras, true);
+        let sel = smart_llm_default().unwrap();
+        assert_eq!(sel.provider, Provider::Cerebras);
+        assert_eq!(sel.model, "gpt-oss-120b");
         reset_providers_verified();
     }
 

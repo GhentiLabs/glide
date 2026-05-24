@@ -27,13 +27,10 @@ pub fn build_provider(
     providers: &ProvidersConfig,
 ) -> Result<Box<dyn LlmProvider>> {
     match provider {
-        // Both OpenAI and Groq use the OpenAI-compatible API format
-        Provider::OpenAi | Provider::Groq => Ok(Box::new(openai::OpenAiLlmProvider::new(
-            provider,
-            model,
-            system_prompt,
-            providers,
-        )?)),
+        // OpenAI, Groq, and Cerebras use the OpenAI-compatible API format.
+        Provider::OpenAi | Provider::Groq | Provider::Cerebras => Ok(Box::new(
+            openai::OpenAiLlmProvider::new(provider, model, system_prompt, providers)?,
+        )),
         Provider::AppleLocal => Ok(Box::new(apple::AppleFoundationLlmProvider::new(
             model,
             system_prompt,

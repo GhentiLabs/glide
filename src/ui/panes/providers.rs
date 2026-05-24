@@ -23,9 +23,10 @@ impl SettingsApp {
     ) -> impl IntoElement {
         let mut container = div().flex().flex_col().gap_2();
 
-        let remote_providers: [(Provider, &ProviderInputs); 2] = [
+        let remote_providers: [(Provider, &ProviderInputs); 3] = [
             (Provider::OpenAi, &self.openai_inputs),
             (Provider::Groq, &self.groq_inputs),
+            (Provider::Cerebras, &self.cerebras_inputs),
         ];
 
         for (idx, (provider, inputs)) in remote_providers.iter().enumerate() {
@@ -117,8 +118,8 @@ impl SettingsApp {
         }
 
         container = container
-            .child(self.render_apple_local_provider_card(cx, 2))
-            .child(self.render_parakeet_provider_card(cx, 3));
+            .child(self.render_apple_local_provider_card(cx, 3))
+            .child(self.render_parakeet_provider_card(cx, 4));
 
         container
     }

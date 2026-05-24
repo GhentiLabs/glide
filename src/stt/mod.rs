@@ -22,13 +22,16 @@ pub fn build_provider(
     vocabulary_prompt: Option<String>,
 ) -> Result<Box<dyn SttProvider>> {
     match provider {
-        // Both OpenAI and Groq use the OpenAI-compatible API format
+        // OpenAI and Groq use the OpenAI-compatible transcription API format.
         Provider::OpenAi | Provider::Groq => Ok(Box::new(openai::OpenAiSttProvider::new(
             provider,
             model,
             providers,
             vocabulary_prompt,
         )?)),
+        Provider::Cerebras => {
+            anyhow::bail!("Cerebras does not provide a speech-to-text model")
+        }
         Provider::AppleLocal => Ok(Box::new(apple::AppleSpeechProvider::new(
             model,
             vocabulary_prompt,
