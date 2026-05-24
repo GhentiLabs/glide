@@ -4,6 +4,9 @@ use crate::config::{Provider, ProvidersConfig};
 
 mod apple;
 mod openai;
+mod util;
+
+pub(crate) use util::strip_think_tags;
 
 #[derive(Debug, Clone, Default)]
 pub struct CleanupContext {

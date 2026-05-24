@@ -32,15 +32,7 @@ if ! command -v just &>/dev/null; then
 fi
 info "  just: $(just --version)"
 
-# ── 4. xcodegen ──────────────────────────────────────────────────────────
-info "Checking xcodegen..."
-if ! command -v xcodegen &>/dev/null; then
-    warn "xcodegen not found — installing via Homebrew..."
-    brew install xcodegen
-fi
-info "  xcodegen: $(xcodegen --version 2>/dev/null || echo 'installed')"
-
-# ── 5. Rust / rustup ─────────────────────────────────────────────────────
+# ── 4. Rust / rustup ─────────────────────────────────────────────────────
 info "Checking Rust..."
 if ! command -v rustup &>/dev/null; then
     warn "rustup not found — installing Rust..."
@@ -49,29 +41,16 @@ if ! command -v rustup &>/dev/null; then
 fi
 info "  Rust: $(rustc --version)"
 
-# ── 6. iOS Rust targets ──────────────────────────────────────────────────
-info "Checking iOS Rust targets..."
-for target in aarch64-apple-ios aarch64-apple-ios-sim; do
-    if rustup target list --installed 2>/dev/null | grep -q "^${target}$"; then
-        info "  Already installed: $target"
-    else
-        info "  Installing: $target"
-        rustup target add "$target"
-    fi
-done
-
-# ── 7. Smoke test ────────────────────────────────────────────────────────
+# ── 5. Smoke test ────────────────────────────────────────────────────────
 cd "$REPO_DIR"
-info "Running smoke test (cargo check --workspace)..."
-cargo check --workspace
+info "Running smoke test (cargo check)..."
+cargo check
 
 info ""
 info "Setup complete!"
 info ""
 info "Commands:"
 info "  just dev           # debug build + run (macOS)"
-info "  just dev ios       # debug build + run (iOS Simulator)"
 info "  just build         # release build + .app bundle (macOS)"
-info "  just build ios     # release build (iOS device)"
 info "  just test          # run all tests"
 info "  just               # list all recipes"

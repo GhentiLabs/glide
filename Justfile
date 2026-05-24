@@ -1,10 +1,8 @@
-# Glide — unified build system
+# Glide - desktop build system
 # Install: brew install just  (or: cargo install just)
 # Usage:   just              (list all recipes)
 #          just dev           (debug build + run for current OS)
-#          just dev ios       (debug build + run on iOS Simulator)
 #          just build         (release build + package for current OS)
-#          just build ios     (release build for iOS device)
 
 ROOT := justfile_directory()
 current_os := if os() == "macos" { "mac" } else { os() }
@@ -15,11 +13,11 @@ default:
 
 # ─── Primary Commands ─────────────────────────────────────────────────────────
 
-# Debug build + auto-run (platform: mac, ios, linux, windows)
+# Debug build + auto-run (platform: mac, linux, windows)
 dev platform=current_os:
     @just _dev-{{platform}}
 
-# Release build + package artifacts (platform: mac, ios, linux, windows)
+# Release build + package artifacts (platform: mac, linux, windows)
 build platform=current_os:
     @just _build-{{platform}}
 
@@ -37,53 +35,6 @@ _build-mac:
 dev-signed:
     {{ROOT}}/bundle.sh --debug --sign
     open {{ROOT}}/target/debug/Glide.app
-
-# ─── iOS ──────────────────────────────────────────────────────────────────────
-
-[private]
-_dev-ios:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Building glide-core for iOS Simulator..."
-    cargo build --package glide-core --target aarch64-apple-ios-sim
-    echo "Generating Xcode project..."
-    cd "{{ROOT}}/ios" && xcodegen generate --quiet
-    SIM_NAME="iPhone 17 Pro"
-    echo "Building iOS app (debug, simulator: $SIM_NAME)..."
-    cd "{{ROOT}}/ios" && xcodebuild build \
-        -project Glide.xcodeproj \
-        -scheme GlideApp \
-        -destination "platform=iOS Simulator,name=$SIM_NAME" \
-        -configuration Debug \
-        -derivedDataPath "{{ROOT}}/ios/build" \
-        -quiet
-    echo "Launching iOS Simulator..."
-    APP_PATH=$(find "{{ROOT}}/ios/build" -name "GlideApp.app" -path "*/Debug-iphonesimulator/*" | head -1)
-    if [ -z "$APP_PATH" ]; then
-        echo "Error: Could not find built GlideApp.app"
-        exit 1
-    fi
-    xcrun simctl boot "$SIM_NAME" 2>/dev/null || true
-    open -a Simulator
-    xcrun simctl install "$SIM_NAME" "$APP_PATH"
-    xcrun simctl launch "$SIM_NAME" com.stelath.glide.app
-
-[private]
-_build-ios:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Building glide-core for iOS device..."
-    cargo build --package glide-core --release --target aarch64-apple-ios
-    echo "Generating Xcode project..."
-    cd "{{ROOT}}/ios" && xcodegen generate --quiet
-    echo "Building iOS app (release, device)..."
-    cd "{{ROOT}}/ios" && xcodebuild build \
-        -project Glide.xcodeproj \
-        -scheme GlideApp \
-        -destination 'generic/platform=iOS' \
-        -configuration Release \
-        -quiet
-    echo "Done: iOS release build complete"
 
 # ─── Linux ────────────────────────────────────────────────────────────────────
 
@@ -105,36 +56,21 @@ _dev-windows:
 _build-windows:
     cargo build --release
 
-# ─── Xcode ────────────────────────────────────────────────────────────────────
-
-# Generate Xcode project and open it
-xcode:
-    cd {{ROOT}}/ios && xcodegen generate
-    open {{ROOT}}/ios/Glide.xcodeproj
-
-# Generate Xcode project only
-xcode-gen:
-    cd {{ROOT}}/ios && xcodegen generate
-
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
 # Check and install required tools
 setup:
     {{ROOT}}/setup.sh
 
-# Install iOS Rust compilation targets
-setup-ios:
-    rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
 # Run all tests
 test:
-    cargo test --workspace
+    cargo test
 
 # Run clippy lints
 lint:
-    cargo clippy --workspace -- -D warnings
+    cargo clippy -- -D warnings
 
 # Format all code
 fmt:
@@ -142,13 +78,10 @@ fmt:
 
 # Check compilation without building
 check:
-    cargo check --workspace
+    cargo check
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
 
 # Remove all build artifacts
 clean:
     cargo clean
-    rm -rf {{ROOT}}/ios/Glide.xcodeproj
-    rm -rf {{ROOT}}/ios/build
-    rm -rf {{ROOT}}/ios/DerivedData
