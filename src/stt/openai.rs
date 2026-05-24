@@ -56,10 +56,10 @@ impl super::SttProvider for OpenAiSttProvider {
             .text("model", self.default_model.clone())
             .part("file", file_part);
 
-        if let Some(ref prompt) = self.prompt {
-            if !prompt.is_empty() {
-                form = form.text("prompt", prompt.clone());
-            }
+        if let Some(ref prompt) = self.prompt
+            && !prompt.is_empty()
+        {
+            form = form.text("prompt", prompt.clone());
         }
 
         let response = self

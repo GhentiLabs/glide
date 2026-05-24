@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    app::{RuntimeStatus, SharedState},
     audio::RecordedAudio,
     config::ReplacementRule,
     llm::{self, CleanupContext},
-    paste, stt,
+    paste,
+    state::{RuntimeStatus, SharedState},
+    stt,
 };
 
 fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
@@ -104,7 +105,7 @@ pub async fn process_recording(
         );
         let llm_provider =
             llm::build_provider(llm.provider, &llm.model, system_prompt, &config.providers)
-                .with_context(|| format!("failed to build LLM provider"))?;
+                .context("failed to build LLM provider")?;
         llm_provider
             .clean(
                 &raw_text,

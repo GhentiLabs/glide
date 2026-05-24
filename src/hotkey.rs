@@ -3,10 +3,10 @@ use std::{sync::Arc, thread};
 use tokio::runtime::Runtime;
 
 use crate::{
-    app::{RuntimeStatus, SharedState},
     audio::AudioRecorder,
     config::HotkeyTrigger,
     pipeline,
+    state::{RuntimeStatus, SharedState},
 };
 
 // macOS virtual keycodes for the trigger keys we care about.
@@ -261,7 +261,7 @@ fn handle_press(ctx: &mut TapContext) {
     }
 
     // Detect frontmost app before recording starts (before overlay could steal focus)
-    let frontmost = crate::config::frontmost_app_name();
+    let frontmost = crate::platform::frontmost_app_name();
     ctx.shared.set_frontmost_app(frontmost);
 
     let config = ctx.shared.config();
@@ -273,7 +273,7 @@ fn handle_press(ctx: &mut TapContext) {
                 "Listening... release hotkey to transcribe",
             );
             ctx.shared
-                .set_overlay_phase(crate::app::OverlayPhase::Recording);
+                .set_overlay_phase(crate::state::OverlayPhase::Recording);
         }
         Err(error) => {
             ctx.pressed = false;
@@ -288,7 +288,7 @@ fn handle_release(ctx: &mut TapContext) {
 
     // Transition overlay to loading dots
     ctx.shared
-        .set_overlay_phase(crate::app::OverlayPhase::Processing);
+        .set_overlay_phase(crate::state::OverlayPhase::Processing);
     ctx.shared.set_live_audio(None);
 
     match ctx.recorder.stop() {
@@ -300,12 +300,12 @@ fn handle_release(ctx: &mut TapContext) {
             ctx.runtime.spawn(async move {
                 match pipeline::process_recording(shared_clone.clone(), audio, target_app).await {
                     Ok(()) => {
-                        shared_clone.set_overlay_phase(crate::app::OverlayPhase::Dismissed);
+                        shared_clone.set_overlay_phase(crate::state::OverlayPhase::Dismissed);
                     }
                     Err(error) => {
                         eprintln!("pipeline error: {error:#}");
                         shared_clone.set_error(error.to_string());
-                        shared_clone.set_overlay_phase(crate::app::OverlayPhase::Dismissed);
+                        shared_clone.set_overlay_phase(crate::state::OverlayPhase::Dismissed);
                     }
                 }
             });
@@ -315,7 +315,7 @@ fn handle_release(ctx: &mut TapContext) {
             ctx.shared
                 .set_error(format!("failed to finish recording: {error:#}"));
             ctx.shared
-                .set_overlay_phase(crate::app::OverlayPhase::Dismissed);
+                .set_overlay_phase(crate::state::OverlayPhase::Dismissed);
         }
     }
 }

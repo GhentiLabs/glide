@@ -6,8 +6,8 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
-use crate::app::LiveAudioData;
 use crate::config::AudioConfig;
+use crate::state::LiveAudioData;
 
 const RING_BUFFER_SIZE: usize = 8192;
 
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(samples.len(), 3);
         assert_eq!(samples[0], 0);
         assert_eq!(samples[1], i16::MAX);
-        assert_eq!(samples[2], (-1.0f32 * i16::MAX as f32) as i16);
+        assert_eq!(samples[2], (-(i16::MAX as f32)) as i16);
     }
 
     #[test]
@@ -365,7 +365,7 @@ mod tests {
         push_frames(2, 1, |i| [2.0f32, -2.0][i], &mut target, &mut live);
         assert_eq!(target.len(), 2);
         assert_eq!(target[0], i16::MAX);
-        assert_eq!(target[1], (-1.0f32 * i16::MAX as f32) as i16);
+        assert_eq!(target[1], (-(i16::MAX as f32)) as i16);
     }
 
     #[test]

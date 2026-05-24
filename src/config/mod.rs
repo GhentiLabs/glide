@@ -1,16 +1,7 @@
-mod macos;
 pub mod models;
 pub mod providers;
 
-pub use macos::{
-    accent_icon_path, app_icon_path, frontmost_app_name, fuzzy_match, list_applications,
-    main_display_size, notch_dimensions, notch_width, preload_app_icons,
-};
-pub use models::{
-    DictationConfig, DictionaryConfig, ModelInfo, ModelSelection, ReplacementRule, Style,
-    any_provider_verified, apply_smart_defaults_initial, cached_llm_models, cached_stt_models,
-    fetch_all_models, provider_verified, smart_llm_default, smart_stt_default,
-};
+pub use models::{DictationConfig, DictionaryConfig, ModelSelection, ReplacementRule, Style};
 pub use providers::{Provider, ProvidersConfig};
 
 use std::collections::BTreeMap;
@@ -26,15 +17,15 @@ pub fn asset_path(relative: &str) -> PathBuf {
         .parent()
         .and_then(|p| p.parent())
         .map(|p| p.join("Resources").join(relative));
-    if let Some(ref p) = bundle_resources {
-        if p.exists() {
-            return p.clone();
-        }
+    if let Some(ref p) = bundle_resources
+        && p.exists()
+    {
+        return p.clone();
     }
     std::env::current_dir().unwrap_or_default().join(relative)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GlideConfig {
     pub app: AppConfig,
@@ -45,21 +36,6 @@ pub struct GlideConfig {
     pub dictionary: DictionaryConfig,
     pub overlay: OverlayConfig,
     pub paste: PasteConfig,
-}
-
-impl Default for GlideConfig {
-    fn default() -> Self {
-        Self {
-            app: AppConfig::default(),
-            hotkey: HotkeyConfig::default(),
-            audio: AudioConfig::default(),
-            providers: ProvidersConfig::default(),
-            dictation: DictationConfig::default(),
-            dictionary: DictionaryConfig::default(),
-            overlay: OverlayConfig::default(),
-            paste: PasteConfig::default(),
-        }
-    }
 }
 
 impl GlideConfig {

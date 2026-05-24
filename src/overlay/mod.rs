@@ -9,8 +9,8 @@ use gpui::{
     WindowKind, WindowOptions, div, hsla, point, px, size,
 };
 
-use crate::app::{OverlayPhase, SharedState};
 use crate::config::{OverlayConfig, OverlayPosition, OverlayStyle};
+use crate::state::{OverlayPhase, SharedState};
 
 use ffi::*;
 
@@ -74,14 +74,14 @@ impl OverlayView {
                             }
                             OverlayPhase::Recording => {
                                 view.mode = OverlayMode::Eq;
-                                let half = (view.eq_bars.len() + 1) / 2;
+                                let half = view.eq_bars.len().div_ceil(2);
                                 let new_half = compute_eq_bars(&view.shared, half);
                                 let total = view.eq_bars.len();
                                 let mut new_bars = Vec::with_capacity(total);
                                 for i in (0..total / 2).rev() {
                                     new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
                                 }
-                                for i in 0..((total + 1) / 2) {
+                                for i in 0..total.div_ceil(2) {
                                     new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
                                 }
                                 new_bars.truncate(total);
@@ -199,8 +199,8 @@ fn compute_eq_bars(shared: &SharedState, bar_count: usize) -> Vec<f32> {
     } else {
         ring_len - (fft_size - effective_pos)
     };
-    for i in 0..fft_size {
-        samples[i] = live.ring[(start + i) % ring_len];
+    for (i, sample) in samples.iter_mut().enumerate().take(fft_size) {
+        *sample = live.ring[(start + i) % ring_len];
     }
     let sample_rate = live.sample_rate;
     drop(live);
@@ -291,13 +291,13 @@ impl OverlayController {
                         if let Some(ActiveOverlay::Notch(ref state)) = controller.active {
                             match phase {
                                 OverlayPhase::Recording => {
-                                    let half = (NOTCH_BAR_COUNT + 1) / 2;
+                                    let half = NOTCH_BAR_COUNT.div_ceil(2);
                                     let new_half = compute_eq_bars(&controller.shared, half);
                                     let mut new_bars = Vec::with_capacity(NOTCH_BAR_COUNT);
                                     for i in (0..NOTCH_BAR_COUNT / 2).rev() {
                                         new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
                                     }
-                                    for i in 0..((NOTCH_BAR_COUNT + 1) / 2) {
+                                    for i in 0..NOTCH_BAR_COUNT.div_ceil(2) {
                                         new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
                                     }
                                     new_bars.truncate(NOTCH_BAR_COUNT);
@@ -348,7 +348,7 @@ impl OverlayController {
                 }
             }
             OverlayPosition::Floating => {
-                let (screen_w, screen_h) = crate::config::main_display_size();
+                let (screen_w, screen_h) = crate::platform::main_display_size();
                 let ov = &config.overlay;
                 let x = (screen_w as i32 - ov.width as i32) / 2;
                 let y = screen_h as i32 - ov.height as i32 - 80;

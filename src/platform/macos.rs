@@ -1,21 +1,24 @@
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use anyhow::{Context as _, Result};
 
+use crate::config::{ColorAccent, asset_path};
+
 // ---------------------------------------------------------------------------
 // Objective-C runtime FFI
 // ---------------------------------------------------------------------------
 
 #[link(name = "AppKit", kind = "framework")]
+unsafe extern "C" {}
 #[link(name = "Foundation", kind = "framework")]
 unsafe extern "C" {}
 
 unsafe extern "C" {
-    fn objc_getClass(name: *const u8) -> *mut c_void;
-    fn sel_registerName(name: *const u8) -> *mut c_void;
+    fn objc_getClass(name: *const c_char) -> *mut c_void;
+    fn sel_registerName(name: *const c_char) -> *mut c_void;
     fn objc_msgSend(receiver: *mut c_void, sel: *mut c_void) -> *mut c_void;
 }
 
@@ -55,7 +58,7 @@ pub fn list_applications() -> Vec<String> {
             }
         })
         .collect();
-    apps.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    apps.sort_by_key(|app| app.to_lowercase());
     apps
 }
 
@@ -82,8 +85,8 @@ pub fn app_icon_path(app_name: &str) -> Option<PathBuf> {
     }
 }
 
-pub fn accent_icon_path(accent: super::ColorAccent) -> Option<PathBuf> {
-    let source_path = super::asset_path(accent.icns_asset());
+pub fn accent_icon_path(accent: ColorAccent) -> Option<PathBuf> {
+    let source_path = asset_path(accent.icns_asset());
     let png_path = icon_cache_dir().join(format!(
         "glide-app-icon-{}.png",
         accent.label().to_lowercase()
@@ -127,13 +130,13 @@ fn extract_icon_to_png(app_name: &str, dest: &Path) -> Result<()> {
     let msg1: MsgSendPtr = unsafe { std::mem::transmute(objc_msgSend as *const ()) };
 
     unsafe {
-        let workspace_class = objc_getClass(b"NSWorkspace\0".as_ptr());
+        let workspace_class = objc_getClass(c"NSWorkspace".as_ptr());
         if workspace_class.is_null() {
             anyhow::bail!("NSWorkspace class not found");
         }
         let workspace = objc_msgSend(
             workspace_class,
-            sel_registerName(b"sharedWorkspace\0".as_ptr()),
+            sel_registerName(c"sharedWorkspace".as_ptr()),
         );
         if workspace.is_null() {
             anyhow::bail!("failed to get NSWorkspace");
@@ -141,10 +144,10 @@ fn extract_icon_to_png(app_name: &str, dest: &Path) -> Result<()> {
 
         let app_path = std::ffi::CString::new(format!("/Applications/{app_name}.app"))
             .context("invalid app name")?;
-        let nsstring_class = objc_getClass(b"NSString\0".as_ptr());
+        let nsstring_class = objc_getClass(c"NSString".as_ptr());
         let ns_path = msg1(
             nsstring_class,
-            sel_registerName(b"stringWithUTF8String:\0".as_ptr()),
+            sel_registerName(c"stringWithUTF8String:".as_ptr()),
             app_path.as_ptr() as *mut c_void,
         );
         if ns_path.is_null() {
@@ -153,7 +156,7 @@ fn extract_icon_to_png(app_name: &str, dest: &Path) -> Result<()> {
 
         let icon = msg1(
             workspace,
-            sel_registerName(b"iconForFile:\0".as_ptr()),
+            sel_registerName(c"iconForFile:".as_ptr()),
             ns_path,
         );
         if icon.is_null() {
@@ -177,17 +180,17 @@ fn nsimage_from_path(path: &str) -> Result<*mut c_void> {
     unsafe {
         let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
 
-        let ns_string_class = objc_getClass(b"NSString\0".as_ptr());
+        let ns_string_class = objc_getClass(c"NSString".as_ptr());
         if ns_string_class.is_null() {
             anyhow::bail!("NSString class not found");
         }
-        let alloc = objc_msgSend(ns_string_class, sel_registerName(b"alloc\0".as_ptr()));
+        let alloc = objc_msgSend(ns_string_class, sel_registerName(c"alloc".as_ptr()));
         type MsgSendInitString =
             unsafe extern "C" fn(*mut c_void, *mut c_void, *const u8, usize, usize) -> *mut c_void;
         let msg_init_str: MsgSendInitString = std::mem::transmute(objc_msgSend as *const ());
         let ns_path = msg_init_str(
             alloc,
-            sel_registerName(b"initWithBytes:length:encoding:\0".as_ptr()),
+            sel_registerName(c"initWithBytes:length:encoding:".as_ptr()),
             path.as_bytes().as_ptr(),
             path.len(),
             4, // NSUTF8StringEncoding
@@ -196,14 +199,14 @@ fn nsimage_from_path(path: &str) -> Result<*mut c_void> {
             anyhow::bail!("failed to create NSString path");
         }
 
-        let ns_image_class = objc_getClass(b"NSImage\0".as_ptr());
+        let ns_image_class = objc_getClass(c"NSImage".as_ptr());
         if ns_image_class.is_null() {
             anyhow::bail!("NSImage class not found");
         }
-        let image_alloc = objc_msgSend(ns_image_class, sel_registerName(b"alloc\0".as_ptr()));
+        let image_alloc = objc_msgSend(ns_image_class, sel_registerName(c"alloc".as_ptr()));
         let image = msg_ptr(
             image_alloc,
-            sel_registerName(b"initWithContentsOfFile:\0".as_ptr()),
+            sel_registerName(c"initWithContentsOfFile:".as_ptr()),
             ns_path,
         );
         if image.is_null() {
@@ -220,29 +223,29 @@ fn write_nsimage_png(image: *mut c_void, dest: &Path) -> Result<()> {
         let msg_usize: MsgSendUsize = std::mem::transmute(objc_msgSend as *const ());
         let msg_len: MsgSendLen = std::mem::transmute(objc_msgSend as *const ());
 
-        let tiff_data = objc_msgSend(image, sel_registerName(b"TIFFRepresentation\0".as_ptr()));
+        let tiff_data = objc_msgSend(image, sel_registerName(c"TIFFRepresentation".as_ptr()));
         if tiff_data.is_null() {
             anyhow::bail!("failed to get TIFF data");
         }
 
-        let rep_class = objc_getClass(b"NSBitmapImageRep\0".as_ptr());
+        let rep_class = objc_getClass(c"NSBitmapImageRep".as_ptr());
         if rep_class.is_null() {
             anyhow::bail!("NSBitmapImageRep class not found");
         }
         let rep = msg1(
             rep_class,
-            sel_registerName(b"imageRepWithData:\0".as_ptr()),
+            sel_registerName(c"imageRepWithData:".as_ptr()),
             tiff_data,
         );
         if rep.is_null() {
             anyhow::bail!("failed to create bitmap rep");
         }
 
-        let dict_class = objc_getClass(b"NSDictionary\0".as_ptr());
-        let empty_dict = objc_msgSend(dict_class, sel_registerName(b"dictionary\0".as_ptr()));
+        let dict_class = objc_getClass(c"NSDictionary".as_ptr());
+        let empty_dict = objc_msgSend(dict_class, sel_registerName(c"dictionary".as_ptr()));
         let png_data = msg_usize(
             rep,
-            sel_registerName(b"representationUsingType:properties:\0".as_ptr()),
+            sel_registerName(c"representationUsingType:properties:".as_ptr()),
             4, // NSBitmapImageFileTypePNG
             empty_dict,
         );
@@ -250,8 +253,8 @@ fn write_nsimage_png(image: *mut c_void, dest: &Path) -> Result<()> {
             anyhow::bail!("failed to create PNG data");
         }
 
-        let bytes_ptr = objc_msgSend(png_data, sel_registerName(b"bytes\0".as_ptr())) as *const u8;
-        let length = msg_len(png_data, sel_registerName(b"length\0".as_ptr()));
+        let bytes_ptr = objc_msgSend(png_data, sel_registerName(c"bytes".as_ptr())) as *const u8;
+        let length = msg_len(png_data, sel_registerName(c"length".as_ptr()));
         if bytes_ptr.is_null() || length == 0 {
             anyhow::bail!("empty PNG data");
         }
@@ -297,13 +300,13 @@ pub fn frontmost_app_name() -> Option<String> {
     let msg1: MsgSendPtr = unsafe { std::mem::transmute(objc_msgSend as *const ()) };
 
     unsafe {
-        let workspace_class = objc_getClass(b"NSWorkspace\0".as_ptr());
+        let workspace_class = objc_getClass(c"NSWorkspace".as_ptr());
         if workspace_class.is_null() {
             return None;
         }
         let workspace = objc_msgSend(
             workspace_class,
-            sel_registerName(b"sharedWorkspace\0".as_ptr()),
+            sel_registerName(c"sharedWorkspace".as_ptr()),
         );
         if workspace.is_null() {
             return None;
@@ -311,20 +314,20 @@ pub fn frontmost_app_name() -> Option<String> {
 
         let app = objc_msgSend(
             workspace,
-            sel_registerName(b"frontmostApplication\0".as_ptr()),
+            sel_registerName(c"frontmostApplication".as_ptr()),
         );
         if app.is_null() {
             return None;
         }
 
-        let ns_name = objc_msgSend(app, sel_registerName(b"localizedName\0".as_ptr()));
+        let ns_name = objc_msgSend(app, sel_registerName(c"localizedName".as_ptr()));
         if ns_name.is_null() {
             return None;
         }
 
         let cstr_ptr = msg1(
             ns_name,
-            sel_registerName(b"UTF8String\0".as_ptr()),
+            sel_registerName(c"UTF8String".as_ptr()),
             std::ptr::null_mut(),
         ) as *const i8;
         if cstr_ptr.is_null() {
@@ -361,23 +364,20 @@ pub fn main_display_size() -> (usize, usize) {
 
 pub fn notch_width() -> Option<u32> {
     unsafe {
-        let ns_screen = objc_getClass(b"NSScreen\0".as_ptr());
+        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
         if ns_screen.is_null() {
             return None;
         }
-        let screen = objc_msgSend(ns_screen, sel_registerName(b"mainScreen\0".as_ptr()));
+        let screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
         if screen.is_null() {
             return None;
         }
 
         let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
 
-        let frame = msg_rect(screen, sel_registerName(b"frame\0".as_ptr()));
-        let left_area = msg_rect(screen, sel_registerName(b"auxiliaryTopLeftArea\0".as_ptr()));
-        let right_area = msg_rect(
-            screen,
-            sel_registerName(b"auxiliaryTopRightArea\0".as_ptr()),
-        );
+        let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
+        let left_area = msg_rect(screen, sel_registerName(c"auxiliaryTopLeftArea".as_ptr()));
+        let right_area = msg_rect(screen, sel_registerName(c"auxiliaryTopRightArea".as_ptr()));
 
         if left_area.w == 0.0 && right_area.w == 0.0 {
             return None;
@@ -390,23 +390,20 @@ pub fn notch_width() -> Option<u32> {
 
 pub fn notch_dimensions() -> Option<(f64, f64)> {
     unsafe {
-        let ns_screen = objc_getClass(b"NSScreen\0".as_ptr());
+        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
         if ns_screen.is_null() {
             return None;
         }
-        let screen = objc_msgSend(ns_screen, sel_registerName(b"mainScreen\0".as_ptr()));
+        let screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
         if screen.is_null() {
             return None;
         }
 
         let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
 
-        let frame = msg_rect(screen, sel_registerName(b"frame\0".as_ptr()));
-        let left_area = msg_rect(screen, sel_registerName(b"auxiliaryTopLeftArea\0".as_ptr()));
-        let right_area = msg_rect(
-            screen,
-            sel_registerName(b"auxiliaryTopRightArea\0".as_ptr()),
-        );
+        let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
+        let left_area = msg_rect(screen, sel_registerName(c"auxiliaryTopLeftArea".as_ptr()));
+        let right_area = msg_rect(screen, sel_registerName(c"auxiliaryTopRightArea".as_ptr()));
 
         if left_area.w == 0.0 && right_area.w == 0.0 {
             return None;

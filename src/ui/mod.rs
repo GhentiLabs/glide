@@ -16,8 +16,8 @@ use gpui_component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem, SidebarTogg
 use gpui_component::theme::{Theme, ThemeMode};
 use gpui_component::{Icon, IconName};
 
-use crate::app::SharedState;
 use crate::config::{ColorAccent, GlideConfig, Style, ThemePreference};
+use crate::state::SharedState;
 
 const AUTOSAVE_DELAY: Duration = Duration::from_millis(800);
 
@@ -178,9 +178,9 @@ impl SettingsApp {
         let shared_for_defaults = shared.clone();
         cx.spawn(async move |_this, cx| {
             cx.background_executor().timer(Duration::from_secs(2)).await;
-            if crate::config::any_provider_verified() {
+            if crate::model_catalog::any_provider_verified() {
                 let _ = shared_for_defaults.update_config(|config| {
-                    crate::config::apply_smart_defaults_initial(config);
+                    crate::model_catalog::apply_smart_defaults_initial(config);
                 });
             }
         })
@@ -323,14 +323,14 @@ impl SettingsApp {
         if providers_changed {
             self.last_fetched_openai_key = new_openai_key;
             self.last_fetched_groq_key = new_groq_key;
-            crate::config::fetch_all_models(&providers);
+            crate::model_catalog::fetch_all_models(&providers);
 
             let shared = self.shared.clone();
             cx.spawn(async move |_this, cx| {
                 cx.background_executor().timer(Duration::from_secs(3)).await;
-                if crate::config::any_provider_verified() {
+                if crate::model_catalog::any_provider_verified() {
                     let _ = shared.update_config(|config| {
-                        crate::config::apply_smart_defaults_initial(config);
+                        crate::model_catalog::apply_smart_defaults_initial(config);
                     });
                 }
             })
@@ -533,8 +533,8 @@ mod tests {
 
     use gpui::{AppContext, TestAppContext, VisualTestContext};
 
-    use crate::app::SharedAppState;
     use crate::config::GlideConfig;
+    use crate::state::SharedAppState;
 
     fn test_shared_state() -> SharedState {
         Arc::new(SharedAppState::new(GlideConfig::default()))

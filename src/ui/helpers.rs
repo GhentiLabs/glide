@@ -7,8 +7,8 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
 use gpui_component::{Icon, IconName};
 
-use crate::app::SharedState;
 use crate::config::{GlideConfig, ModelSelection, OverlayPosition, Provider};
+use crate::state::SharedState;
 
 pub(super) fn field_label(text: &str, cx: &App) -> gpui::Div {
     div()
@@ -158,7 +158,7 @@ pub(super) fn display_model_name(id: &str) -> &str {
     id.rsplit_once('/').map(|(_, name)| name).unwrap_or(id)
 }
 
-pub(super) fn model_display_name(model: &crate::config::ModelInfo) -> String {
+pub(super) fn model_display_name(model: &crate::model_catalog::ModelInfo) -> String {
     if model.display_name.trim().is_empty() {
         display_model_name(&model.id).to_string()
     } else {
@@ -166,7 +166,7 @@ pub(super) fn model_display_name(model: &crate::config::ModelInfo) -> String {
     }
 }
 
-pub(super) fn model_label_for(id: &str, models: &[crate::config::ModelInfo]) -> String {
+pub(super) fn model_label_for(id: &str, models: &[crate::model_catalog::ModelInfo]) -> String {
     models
         .iter()
         .find(|model| model.id == id)
@@ -175,7 +175,7 @@ pub(super) fn model_label_for(id: &str, models: &[crate::config::ModelInfo]) -> 
 }
 
 pub(super) fn model_picker_item(
-    model: &crate::config::ModelInfo,
+    model: &crate::model_catalog::ModelInfo,
     recommended: bool,
     cx: &App,
 ) -> gpui::Stateful<gpui::Div> {
@@ -216,7 +216,7 @@ pub(super) fn model_picker_item(
 pub(super) fn model_dropdown_button(
     id: &str,
     current_model: &str,
-    models: &[crate::config::ModelInfo],
+    models: &[crate::model_catalog::ModelInfo],
     recommended_model: Option<&str>,
     shared: SharedState,
     search_entity: Entity<InputState>,
@@ -255,8 +255,8 @@ pub(super) fn model_dropdown_button(
                     .iter()
                     .filter_map(|m| {
                         let display = model_display_name(m);
-                        let id_score = crate::config::fuzzy_match(&query, &m.id);
-                        let display_score = crate::config::fuzzy_match(&query, &display);
+                        let id_score = crate::platform::fuzzy_match(&query, &m.id);
+                        let display_score = crate::platform::fuzzy_match(&query, &display);
                         id_score.or(display_score).map(|s| (m, s))
                     })
                     .collect();
@@ -330,7 +330,7 @@ pub(super) fn model_dropdown_button(
 pub(super) fn style_model_dropdown(
     id: &str,
     current_display: &str,
-    models: &[crate::config::ModelInfo],
+    models: &[crate::model_catalog::ModelInfo],
     shared: SharedState,
     search_entity: Entity<InputState>,
     style_index: usize,
@@ -375,8 +375,8 @@ pub(super) fn style_model_dropdown(
                     .iter()
                     .filter_map(|m| {
                         let display = model_display_name(m);
-                        let id_score = crate::config::fuzzy_match(&query, &m.id);
-                        let display_score = crate::config::fuzzy_match(&query, &display);
+                        let id_score = crate::platform::fuzzy_match(&query, &m.id);
+                        let display_score = crate::platform::fuzzy_match(&query, &display);
                         id_score.or(display_score).map(|s| (m, s))
                     })
                     .collect();

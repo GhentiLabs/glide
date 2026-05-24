@@ -98,21 +98,12 @@ impl ProvidersConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProviderCredentials {
     #[serde(skip)]
     pub api_key: String,
     pub base_url: String,
-}
-
-impl Default for ProviderCredentials {
-    fn default() -> Self {
-        Self {
-            api_key: String::new(),
-            base_url: String::new(),
-        }
-    }
 }
 
 impl ProviderCredentials {

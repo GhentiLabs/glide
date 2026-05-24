@@ -319,7 +319,7 @@ fn helper_was_fatal_signal(status: &ExitStatus) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        return matches!(status.signal(), Some(5 | 6));
+        matches!(status.signal(), Some(5 | 6))
     }
     #[cfg(not(unix))]
     {

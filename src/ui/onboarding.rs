@@ -164,12 +164,12 @@ impl SettingsApp {
     fn onboarding_advance(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) {
         if let Some(next) = self.onboarding_step.next() {
             // Save hotkey when leaving the hotkey step
-            if self.onboarding_step == OnboardingStep::Hotkey {
-                if let Some(trigger) = self.onboarding_selected_trigger {
-                    let _ = self.shared.update_config(|config| {
-                        config.hotkey.trigger = Some(trigger);
-                    });
-                }
+            if self.onboarding_step == OnboardingStep::Hotkey
+                && let Some(trigger) = self.onboarding_selected_trigger
+            {
+                let _ = self.shared.update_config(|config| {
+                    config.hotkey.trigger = Some(trigger);
+                });
             }
             self.onboarding_step = next;
             cx.notify();
@@ -249,7 +249,7 @@ impl SettingsApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let accent = self.shared.snapshot().config.app.accent;
-        let icon_path = crate::config::accent_icon_path(accent)
+        let icon_path = crate::platform::accent_icon_path(accent)
             .unwrap_or_else(|| crate::config::asset_path("assets/icons/logo.svg"));
 
         div()
@@ -433,11 +433,11 @@ impl SettingsApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         // Poll for recorded keycode if recording
-        if self.onboarding_recording_custom {
-            if let Some(code) = self.shared.poll_recorded_keycode() {
-                self.onboarding_selected_trigger = Some(HotkeyTrigger::from_keycode(code));
-                self.onboarding_recording_custom = false;
-            }
+        if self.onboarding_recording_custom
+            && let Some(code) = self.shared.poll_recorded_keycode()
+        {
+            self.onboarding_selected_trigger = Some(HotkeyTrigger::from_keycode(code));
+            self.onboarding_recording_custom = false;
         }
 
         let presets: [(HotkeyTrigger, &str); 4] = hotkey_presets();
