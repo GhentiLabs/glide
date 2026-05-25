@@ -21,8 +21,10 @@ target/
 # Screenshots / images (not source assets)
 *.png
 !assets/icons/*.png
+!assets/screenshots/*.png
 
 # Environment / secrets
 .env
 
 .omx/
+.antigravitycli/
