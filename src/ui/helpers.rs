@@ -154,7 +154,27 @@ pub(super) fn hint_row(text: &str, cx: &App) -> gpui::Div {
         .child(text.to_string())
 }
 
+fn strip_segment_prefix<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+    let rest = value.strip_prefix(prefix)?.strip_prefix('/')?;
+    (!rest.is_empty()).then_some(rest)
+}
+
+fn strip_model_display_prefix<'a>(value: &'a str, provider: Option<&str>) -> &'a str {
+    let prefixes: &[&str] = match provider {
+        Some("Fireworks") => &["accounts/fireworks/models"],
+        Some("Groq") => &["openai", "meta-llama"],
+        None => &["accounts/fireworks/models", "openai", "meta-llama"],
+        _ => &[],
+    };
+
+    prefixes
+        .iter()
+        .find_map(|prefix| strip_segment_prefix(value, prefix))
+        .unwrap_or(value)
+}
+
 pub(super) fn display_model_name(id: &str) -> &str {
+    let id = strip_model_display_prefix(id, None);
     id.rsplit_once('/').map(|(_, name)| name).unwrap_or(id)
 }
 
@@ -162,7 +182,7 @@ pub(super) fn model_display_name(model: &crate::model_catalog::ModelInfo) -> Str
     if model.display_name.trim().is_empty() {
         display_model_name(&model.id).to_string()
     } else {
-        model.display_name.clone()
+        strip_model_display_prefix(&model.display_name, Some(&model.provider)).to_string()
     }
 }
 
@@ -225,6 +245,7 @@ pub(super) fn disable_llm_rewrite(config: &mut GlideConfig) {
     config.dictation.smart_defaults_applied = true;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn model_dropdown_button(
     id: &str,
     current_model: &str,
@@ -367,9 +388,61 @@ pub(super) fn model_dropdown_button(
     wrapper.child(div().min_w_0().overflow_hidden().child(popover))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model(provider: &str, id: &str, display_name: &str) -> crate::model_catalog::ModelInfo {
+        crate::model_catalog::ModelInfo {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            provider: provider.to_string(),
+            logo: String::new(),
+            local: false,
+            installed: false,
+        }
+    }
+
+    #[test]
+    fn test_model_display_name_strips_fireworks_account_prefix() {
+        let model = model(
+            "Fireworks",
+            "accounts/fireworks/models/gpt-oss-20b",
+            "accounts/fireworks/models/gpt-oss-20b",
+        );
+
+        assert_eq!(model_display_name(&model), "gpt-oss-20b");
+    }
+
+    #[test]
+    fn test_model_display_name_strips_groq_provider_prefixes() {
+        let openai = model("Groq", "openai/gpt-oss-120b", "openai/gpt-oss-120b");
+        let meta_llama = model(
+            "Groq",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+        );
+
+        assert_eq!(model_display_name(&openai), "gpt-oss-120b");
+        assert_eq!(
+            model_display_name(&meta_llama),
+            "llama-4-scout-17b-16e-instruct"
+        );
+    }
+
+    #[test]
+    fn test_model_display_name_preserves_other_slashy_display_names() {
+        let model = model("Other", "vendor/model", "vendor/model");
+
+        assert_eq!(model_display_name(&model), "vendor/model");
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn style_model_dropdown(
     id: &str,
     current_display: &str,
+    current_model_id: Option<&str>,
     models: &[crate::model_catalog::ModelInfo],
     shared: SharedState,
     search_entity: Entity<InputState>,
@@ -384,9 +457,13 @@ pub(super) fn style_model_dropdown(
     } else {
         current_display
     };
-    let current_logo = models
-        .iter()
-        .find(|m| m.id == raw_model || m.display_name == raw_model)
+    let current_logo = current_model_id
+        .and_then(|current_model_id| models.iter().find(|m| m.id == current_model_id))
+        .or_else(|| {
+            models
+                .iter()
+                .find(|m| m.id == raw_model || model_display_name(m) == raw_model)
+        })
         .map(|m| m.logo.clone());
     let models = models.to_vec();
 

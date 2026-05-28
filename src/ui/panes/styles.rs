@@ -25,11 +25,8 @@ impl SettingsApp {
         // -- Default Prompt & Models --
         let snapshot = self.shared.snapshot();
         let default_stt = snapshot.config.dictation.stt.model.clone();
-        let default_llm = snapshot
-            .config
-            .dictation
-            .llm
-            .as_ref()
+        let default_llm_selection = snapshot.config.dictation.llm.as_ref();
+        let default_llm = default_llm_selection
             .map(|s| s.model.clone())
             .unwrap_or_else(|| "Disabled".to_string());
         let stt_models = crate::model_catalog::cached_stt_models();
@@ -407,16 +404,20 @@ impl SettingsApp {
                     }));
 
                 let cfg_styles = &snapshot.config.dictation.styles;
-                let stt_display = cfg_styles
-                    .get(index)
-                    .and_then(|s| s.stt.as_ref())
+                let stt_selection = cfg_styles.get(index).and_then(|s| s.stt.as_ref());
+                let stt_model_id = stt_selection
+                    .map(|sel| sel.model.as_str())
+                    .unwrap_or(default_stt.as_str());
+                let stt_display = stt_selection
                     .map(|sel| model_label_for(&sel.model, &stt_models))
                     .unwrap_or_else(|| {
                         format!("Default ({})", model_label_for(&default_stt, &stt_models))
                     });
-                let llm_display = cfg_styles
-                    .get(index)
-                    .and_then(|s| s.llm.as_ref())
+                let llm_selection = cfg_styles.get(index).and_then(|s| s.llm.as_ref());
+                let llm_model_id = llm_selection
+                    .map(|sel| sel.model.as_str())
+                    .or_else(|| default_llm_selection.map(|sel| sel.model.as_str()));
+                let llm_display = llm_selection
                     .map(|sel| model_label_for(&sel.model, &llm_models))
                     .unwrap_or_else(|| {
                         format!("Default ({})", model_label_for(&default_llm, &llm_models))
@@ -457,6 +458,7 @@ impl SettingsApp {
                                 .child(style_model_dropdown(
                                     &format!("style-stt-{index}"),
                                     &stt_display,
+                                    Some(stt_model_id),
                                     &stt_models,
                                     self.shared.clone(),
                                     style.stt_model_search.clone(),
@@ -466,6 +468,7 @@ impl SettingsApp {
                                 .child(style_model_dropdown(
                                     &format!("style-llm-{index}"),
                                     &llm_display,
+                                    llm_model_id,
                                     &llm_models,
                                     self.shared.clone(),
                                     style.llm_model_search.clone(),
