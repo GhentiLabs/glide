@@ -23,9 +23,6 @@ pub struct AppleCapabilities {
     #[serde(default)]
     pub apple_speech_reason: String,
     #[serde(default)]
-    #[allow(dead_code)]
-    pub foundation_models_available: bool,
-    #[serde(default)]
     pub foundation_models_reason: String,
 }
 
@@ -89,8 +86,6 @@ struct HelperResponse {
     #[serde(default)]
     apple_speech_reason: String,
     #[serde(default)]
-    foundation_models_available: bool,
-    #[serde(default)]
     foundation_models_reason: String,
     error: Option<String>,
 }
@@ -148,7 +143,6 @@ pub fn cached_capabilities() -> AppleCapabilities {
     let capabilities = capabilities().unwrap_or_else(|error| AppleCapabilities {
         apple_speech_available: false,
         apple_speech_reason: error.to_string(),
-        foundation_models_available: false,
         foundation_models_reason: error.to_string(),
     });
     *locked = Some(capabilities.clone());
@@ -166,7 +160,6 @@ pub fn capabilities() -> Result<AppleCapabilities> {
     Ok(AppleCapabilities {
         apple_speech_available: response.apple_speech_available,
         apple_speech_reason: response.apple_speech_reason,
-        foundation_models_available: response.foundation_models_available,
         foundation_models_reason: response.foundation_models_reason,
     })
 }
@@ -191,11 +184,6 @@ pub fn release_speech_model(model_id: &str) -> Result<()> {
 pub(crate) fn speech_model_request_json(model_id: &str) -> Result<Vec<u8>> {
     serde_json::to_vec(&SpeechModelRequest { model_id })
         .context("failed to encode Apple Speech model request")
-}
-
-#[allow(dead_code)]
-pub fn transcribe(audio: &[u8], model_id: String, vocabulary: Vec<String>) -> Result<String> {
-    transcribe_profiled(audio, model_id, vocabulary, ProfileCollector::disabled())
 }
 
 pub(crate) fn transcribe_profiled(
@@ -226,22 +214,6 @@ pub(crate) fn transcribe_profiled(
     );
     std::fs::remove_file(&audio_path).ok();
     result
-}
-
-#[allow(dead_code)]
-pub fn cleanup(
-    model_id: &str,
-    raw_text: &str,
-    system_prompt: &str,
-    context: &CleanupContext,
-) -> Result<String> {
-    cleanup_profiled(
-        model_id,
-        raw_text,
-        system_prompt,
-        context,
-        ProfileCollector::disabled(),
-    )
 }
 
 pub(crate) fn cleanup_profiled(
