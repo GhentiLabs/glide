@@ -404,37 +404,35 @@ mod tests {
     }
 
     #[test]
-    fn test_model_display_name_strips_fireworks_account_prefix() {
-        let model = model(
-            "Fireworks",
-            "accounts/fireworks/models/gpt-oss-20b",
-            "accounts/fireworks/models/gpt-oss-20b",
-        );
+    fn model_display_name_strips_only_known_provider_prefixes() {
+        let cases = [
+            (
+                "Fireworks",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "gpt-oss-20b",
+            ),
+            (
+                "Groq",
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-120b",
+                "gpt-oss-120b",
+            ),
+            (
+                "Groq",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-4-scout-17b-16e-instruct",
+            ),
+            ("Other", "vendor/model", "vendor/model", "vendor/model"),
+        ];
 
-        assert_eq!(model_display_name(&model), "gpt-oss-20b");
-    }
-
-    #[test]
-    fn test_model_display_name_strips_groq_provider_prefixes() {
-        let openai = model("Groq", "openai/gpt-oss-120b", "openai/gpt-oss-120b");
-        let meta_llama = model(
-            "Groq",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-        );
-
-        assert_eq!(model_display_name(&openai), "gpt-oss-120b");
-        assert_eq!(
-            model_display_name(&meta_llama),
-            "llama-4-scout-17b-16e-instruct"
-        );
-    }
-
-    #[test]
-    fn test_model_display_name_preserves_other_slashy_display_names() {
-        let model = model("Other", "vendor/model", "vendor/model");
-
-        assert_eq!(model_display_name(&model), "vendor/model");
+        for (provider, id, display_name, expected) in cases {
+            assert_eq!(
+                model_display_name(&model(provider, id, display_name)),
+                expected
+            );
+        }
     }
 }
 
