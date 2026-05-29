@@ -60,19 +60,35 @@ mod settings_state {
 
         cx.read_entity(&view, |app, cx| {
             assert_eq!(
-                app.openai_inputs.base_url.read(cx).value().to_string(),
+                app.provider_inputs_for(Provider::OpenAi)
+                    .base_url
+                    .read(cx)
+                    .value()
+                    .to_string(),
                 defaults.providers.openai.base_url,
             );
             assert_eq!(
-                app.cerebras_inputs.base_url.read(cx).value().to_string(),
+                app.provider_inputs_for(Provider::Cerebras)
+                    .base_url
+                    .read(cx)
+                    .value()
+                    .to_string(),
                 defaults.providers.cerebras.base_url,
             );
             assert_eq!(
-                app.fireworks_inputs.base_url.read(cx).value().to_string(),
+                app.provider_inputs_for(Provider::Fireworks)
+                    .base_url
+                    .read(cx)
+                    .value()
+                    .to_string(),
                 defaults.providers.fireworks.base_url,
             );
             assert_eq!(
-                app.elevenlabs_inputs.base_url.read(cx).value().to_string(),
+                app.provider_inputs_for(Provider::ElevenLabs)
+                    .base_url
+                    .read(cx)
+                    .value()
+                    .to_string(),
                 defaults.providers.elevenlabs.base_url,
             );
         });
@@ -128,7 +144,9 @@ mod inputs_autosave {
     #[gpui::test]
     async fn input_change_subscription_schedules_autosave(cx: &mut TestAppContext) {
         let (view, mut cx) = init_and_create_view(cx);
-        let input_entity = cx.read_entity(&view, |app, _| app.openai_inputs.base_url.clone());
+        let input_entity = cx.read_entity(&view, |app, _| {
+            app.provider_inputs_for(Provider::OpenAi).base_url.clone()
+        });
 
         cx.read_entity(&view, |app, _| {
             assert!(!app.save_pending);

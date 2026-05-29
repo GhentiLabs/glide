@@ -16,7 +16,7 @@ use gpui_component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem, SidebarTogg
 use gpui_component::theme::{Theme, ThemeMode};
 use gpui_component::{Icon, IconName};
 
-use crate::config::{ColorAccent, GlideConfig, Style, ThemePreference};
+use crate::config::{ColorAccent, GlideConfig, Provider, Style, ThemePreference};
 use crate::permissions;
 use crate::state::SharedState;
 
@@ -53,6 +53,7 @@ enum SettingsPane {
 }
 
 struct ProviderInputs {
+    provider: Provider,
     api_key: Entity<InputState>,
     base_url: Entity<InputState>,
 }
@@ -74,12 +75,8 @@ pub struct SettingsApp {
     recording_hotkey: bool,
     recording_toggle_hotkey: bool,
 
-    openai_inputs: ProviderInputs,
-    groq_inputs: ProviderInputs,
-    cerebras_inputs: ProviderInputs,
-    fireworks_inputs: ProviderInputs,
-    elevenlabs_inputs: ProviderInputs,
-    expanded_provider: Option<usize>,
+    provider_inputs: Vec<ProviderInputs>,
+    expanded_provider: Option<Provider>,
     apple_speech_search: Entity<InputState>,
     expanded_style: Option<usize>,
     prompt_expanded: bool,
@@ -89,16 +86,7 @@ pub struct SettingsApp {
     default_llm_search: Entity<InputState>,
     styles: Vec<StyleInputs>,
 
-    last_fetched_openai_key: String,
-    last_fetched_groq_key: String,
-    last_fetched_cerebras_key: String,
-    last_fetched_fireworks_key: String,
-    last_fetched_elevenlabs_key: String,
-    last_fetched_openai_base_url: String,
-    last_fetched_groq_base_url: String,
-    last_fetched_cerebras_base_url: String,
-    last_fetched_fireworks_base_url: String,
-    last_fetched_elevenlabs_base_url: String,
+    last_fetched_providers: crate::config::ProvidersConfig,
 
     save_pending: bool,
 
@@ -126,51 +114,6 @@ impl SettingsApp {
     ) -> Self {
         let config = shared.snapshot().config;
 
-        let openai_creds = &config.providers.openai;
-        let openai_api_key = cx.new(|cx| {
-            InputState::new(window, cx)
-                .masked(true)
-                .default_value(&openai_creds.api_key)
-        });
-        let openai_base_url =
-            cx.new(|cx| InputState::new(window, cx).default_value(&openai_creds.base_url));
-
-        let groq_creds = &config.providers.groq;
-        let groq_api_key = cx.new(|cx| {
-            InputState::new(window, cx)
-                .masked(true)
-                .default_value(&groq_creds.api_key)
-        });
-        let groq_base_url =
-            cx.new(|cx| InputState::new(window, cx).default_value(&groq_creds.base_url));
-
-        let cerebras_creds = &config.providers.cerebras;
-        let cerebras_api_key = cx.new(|cx| {
-            InputState::new(window, cx)
-                .masked(true)
-                .default_value(&cerebras_creds.api_key)
-        });
-        let cerebras_base_url =
-            cx.new(|cx| InputState::new(window, cx).default_value(&cerebras_creds.base_url));
-
-        let fireworks_creds = &config.providers.fireworks;
-        let fireworks_api_key = cx.new(|cx| {
-            InputState::new(window, cx)
-                .masked(true)
-                .default_value(&fireworks_creds.api_key)
-        });
-        let fireworks_base_url =
-            cx.new(|cx| InputState::new(window, cx).default_value(&fireworks_creds.base_url));
-
-        let elevenlabs_creds = &config.providers.elevenlabs;
-        let elevenlabs_api_key = cx.new(|cx| {
-            InputState::new(window, cx)
-                .masked(true)
-                .default_value(&elevenlabs_creds.api_key)
-        });
-        let elevenlabs_base_url =
-            cx.new(|cx| InputState::new(window, cx).default_value(&elevenlabs_creds.base_url));
-
         let default_prompt = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(3, 12)
@@ -183,19 +126,20 @@ impl SettingsApp {
         let replacement_find_input = cx.new(|cx| InputState::new(window, cx));
         let replacement_replace_input = cx.new(|cx| InputState::new(window, cx));
 
-        let mut subs = vec![
-            cx.subscribe_in(&openai_api_key, window, Self::on_input_change),
-            cx.subscribe_in(&openai_base_url, window, Self::on_input_change),
-            cx.subscribe_in(&groq_api_key, window, Self::on_input_change),
-            cx.subscribe_in(&groq_base_url, window, Self::on_input_change),
-            cx.subscribe_in(&cerebras_api_key, window, Self::on_input_change),
-            cx.subscribe_in(&cerebras_base_url, window, Self::on_input_change),
-            cx.subscribe_in(&fireworks_api_key, window, Self::on_input_change),
-            cx.subscribe_in(&fireworks_base_url, window, Self::on_input_change),
-            cx.subscribe_in(&elevenlabs_api_key, window, Self::on_input_change),
-            cx.subscribe_in(&elevenlabs_base_url, window, Self::on_input_change),
-            cx.subscribe_in(&default_prompt, window, Self::on_input_change),
-        ];
+        let mut subs = vec![cx.subscribe_in(&default_prompt, window, Self::on_input_change)];
+        let provider_inputs = Provider::SETTINGS_REMOTE
+            .into_iter()
+            .map(|provider| {
+                let (inputs, provider_subs) = Self::create_provider_inputs(
+                    provider,
+                    config.providers.credentials_for(provider),
+                    window,
+                    cx,
+                );
+                subs.extend(provider_subs);
+                inputs
+            })
+            .collect();
 
         let styles: Vec<_> = config
             .dictation
@@ -245,27 +189,8 @@ impl SettingsApp {
             sidebar_collapsed: false,
             recording_hotkey: false,
             recording_toggle_hotkey: false,
-            openai_inputs: ProviderInputs {
-                api_key: openai_api_key,
-                base_url: openai_base_url,
-            },
-            groq_inputs: ProviderInputs {
-                api_key: groq_api_key,
-                base_url: groq_base_url,
-            },
-            cerebras_inputs: ProviderInputs {
-                api_key: cerebras_api_key,
-                base_url: cerebras_base_url,
-            },
-            fireworks_inputs: ProviderInputs {
-                api_key: fireworks_api_key,
-                base_url: fireworks_base_url,
-            },
-            elevenlabs_inputs: ProviderInputs {
-                api_key: elevenlabs_api_key,
-                base_url: elevenlabs_base_url,
-            },
-            expanded_provider: Some(0),
+            provider_inputs,
+            expanded_provider: Some(Provider::OpenAi),
             apple_speech_search,
             expanded_style: Some(0),
             prompt_expanded: false,
@@ -273,16 +198,7 @@ impl SettingsApp {
             default_stt_search,
             default_llm_search,
             styles,
-            last_fetched_openai_key: config.providers.openai.api_key.clone(),
-            last_fetched_groq_key: config.providers.groq.api_key.clone(),
-            last_fetched_cerebras_key: config.providers.cerebras.api_key.clone(),
-            last_fetched_fireworks_key: config.providers.fireworks.api_key.clone(),
-            last_fetched_elevenlabs_key: config.providers.elevenlabs.api_key.clone(),
-            last_fetched_openai_base_url: config.providers.openai.base_url.clone(),
-            last_fetched_groq_base_url: config.providers.groq.base_url.clone(),
-            last_fetched_cerebras_base_url: config.providers.cerebras.base_url.clone(),
-            last_fetched_fireworks_base_url: config.providers.fireworks.base_url.clone(),
-            last_fetched_elevenlabs_base_url: config.providers.elevenlabs.base_url.clone(),
+            last_fetched_providers: config.providers.clone(),
             save_pending: false,
             vocabulary_input,
             replacement_find_input,
@@ -295,6 +211,41 @@ impl SettingsApp {
             onboarding_recording_custom: false,
             _subscriptions: subs,
         }
+    }
+
+    fn create_provider_inputs(
+        provider: Provider,
+        credentials: &crate::config::ProviderCredentials,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> (ProviderInputs, Vec<Subscription>) {
+        let api_key = cx.new(|cx| {
+            InputState::new(window, cx)
+                .masked(true)
+                .default_value(&credentials.api_key)
+        });
+        let base_url =
+            cx.new(|cx| InputState::new(window, cx).default_value(&credentials.base_url));
+        let subs = vec![
+            cx.subscribe_in(&api_key, window, Self::on_input_change),
+            cx.subscribe_in(&base_url, window, Self::on_input_change),
+        ];
+
+        (
+            ProviderInputs {
+                provider,
+                api_key,
+                base_url,
+            },
+            subs,
+        )
+    }
+
+    fn provider_inputs_for(&self, provider: Provider) -> &ProviderInputs {
+        self.provider_inputs
+            .iter()
+            .find(|inputs| inputs.provider == provider)
+            .expect("remote provider inputs should exist")
     }
 
     fn create_style_inputs(
@@ -396,39 +347,11 @@ impl SettingsApp {
 
     fn save(&mut self, cx: &gpui::Context<Self>) {
         let draft = self.draft_from_inputs(cx);
-        let new_openai_key = draft.providers.openai.api_key.clone();
-        let new_groq_key = draft.providers.groq.api_key.clone();
-        let new_cerebras_key = draft.providers.cerebras.api_key.clone();
-        let new_fireworks_key = draft.providers.fireworks.api_key.clone();
-        let new_elevenlabs_key = draft.providers.elevenlabs.api_key.clone();
-        let new_openai_base_url = draft.providers.openai.base_url.clone();
-        let new_groq_base_url = draft.providers.groq.base_url.clone();
-        let new_cerebras_base_url = draft.providers.cerebras.base_url.clone();
-        let new_fireworks_base_url = draft.providers.fireworks.base_url.clone();
-        let new_elevenlabs_base_url = draft.providers.elevenlabs.base_url.clone();
-        let providers_changed = new_openai_key != self.last_fetched_openai_key
-            || new_groq_key != self.last_fetched_groq_key
-            || new_cerebras_key != self.last_fetched_cerebras_key
-            || new_fireworks_key != self.last_fetched_fireworks_key
-            || new_elevenlabs_key != self.last_fetched_elevenlabs_key
-            || new_openai_base_url != self.last_fetched_openai_base_url
-            || new_groq_base_url != self.last_fetched_groq_base_url
-            || new_cerebras_base_url != self.last_fetched_cerebras_base_url
-            || new_fireworks_base_url != self.last_fetched_fireworks_base_url
-            || new_elevenlabs_base_url != self.last_fetched_elevenlabs_base_url;
+        let providers_changed = draft.providers != self.last_fetched_providers;
         let providers = draft.providers.clone();
         let _ = self.shared.update_config(move |config| *config = draft);
         if providers_changed {
-            self.last_fetched_openai_key = new_openai_key;
-            self.last_fetched_groq_key = new_groq_key;
-            self.last_fetched_cerebras_key = new_cerebras_key;
-            self.last_fetched_fireworks_key = new_fireworks_key;
-            self.last_fetched_elevenlabs_key = new_elevenlabs_key;
-            self.last_fetched_openai_base_url = new_openai_base_url;
-            self.last_fetched_groq_base_url = new_groq_base_url;
-            self.last_fetched_cerebras_base_url = new_cerebras_base_url;
-            self.last_fetched_fireworks_base_url = new_fireworks_base_url;
-            self.last_fetched_elevenlabs_base_url = new_elevenlabs_base_url;
+            self.last_fetched_providers = providers.clone();
             crate::model_catalog::fetch_all_models(&providers);
 
             let shared = self.shared.clone();
@@ -448,22 +371,11 @@ impl SettingsApp {
     fn draft_from_inputs(&self, cx: &gpui::Context<Self>) -> GlideConfig {
         let mut config = self.shared.snapshot().config;
 
-        config.providers.openai.api_key = self.openai_inputs.api_key.read(cx).value().to_string();
-        config.providers.openai.base_url = self.openai_inputs.base_url.read(cx).value().to_string();
-        config.providers.groq.api_key = self.groq_inputs.api_key.read(cx).value().to_string();
-        config.providers.groq.base_url = self.groq_inputs.base_url.read(cx).value().to_string();
-        config.providers.cerebras.api_key =
-            self.cerebras_inputs.api_key.read(cx).value().to_string();
-        config.providers.cerebras.base_url =
-            self.cerebras_inputs.base_url.read(cx).value().to_string();
-        config.providers.fireworks.api_key =
-            self.fireworks_inputs.api_key.read(cx).value().to_string();
-        config.providers.fireworks.base_url =
-            self.fireworks_inputs.base_url.read(cx).value().to_string();
-        config.providers.elevenlabs.api_key =
-            self.elevenlabs_inputs.api_key.read(cx).value().to_string();
-        config.providers.elevenlabs.base_url =
-            self.elevenlabs_inputs.base_url.read(cx).value().to_string();
+        for inputs in &self.provider_inputs {
+            let credentials = config.providers.credentials_for_mut(inputs.provider);
+            credentials.api_key = inputs.api_key.read(cx).value().to_string();
+            credentials.base_url = inputs.base_url.read(cx).value().to_string();
+        }
 
         config.dictation.system_prompt = self.default_prompt.read(cx).value().to_string();
 

@@ -2,7 +2,7 @@ pub mod models;
 pub mod providers;
 
 pub use models::{DictationConfig, DictionaryConfig, ModelSelection, ReplacementRule, Style};
-pub use providers::{Provider, ProvidersConfig};
+pub use providers::{Provider, ProviderCredentials, ProvidersConfig};
 
 use std::collections::BTreeMap;
 use std::fmt;
