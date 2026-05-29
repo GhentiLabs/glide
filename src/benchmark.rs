@@ -74,7 +74,6 @@ pub struct PromptEvalOptions {
     pub candidates: Vec<PromptEvalCandidate>,
     pub runs: usize,
     pub timeout_secs: u64,
-    pub edit_prepass: bool,
     pub output: Option<PathBuf>,
 }
 
@@ -172,7 +171,6 @@ pub struct PromptEvalReport {
     pub suite_path: String,
     pub run_count: usize,
     pub timeout_seconds: u64,
-    pub edit_prepass: bool,
     pub candidates: Vec<PromptEvalCandidateReport>,
 }
 
@@ -520,7 +518,6 @@ fn parse_prompt_eval_args(mut args: VecDeque<String>) -> Result<PromptEvalOption
     let mut candidates = Vec::new();
     let mut runs = DEFAULT_PROMPT_EVAL_RUNS;
     let mut timeout_secs = DEFAULT_PROMPT_EVAL_TIMEOUT_SECS;
-    let mut edit_prepass = true;
     let mut output = None;
 
     while let Some(flag) = args.pop_front() {
@@ -535,7 +532,6 @@ fn parse_prompt_eval_args(mut args: VecDeque<String>) -> Result<PromptEvalOption
                 timeout_secs =
                     parse_u64(&take_value(&mut args, "--timeout-secs")?, "--timeout-secs")?
             }
-            "--no-edit-prepass" => edit_prepass = false,
             "--output" => output = Some(PathBuf::from(take_value(&mut args, "--output")?)),
             "-h" | "--help" => anyhow::bail!("{}", usage()),
             other => anyhow::bail!("unknown prompt-eval option '{other}'\n\n{}", usage()),
@@ -552,7 +548,6 @@ fn parse_prompt_eval_args(mut args: VecDeque<String>) -> Result<PromptEvalOption
         candidates,
         runs,
         timeout_secs,
-        edit_prepass,
         output,
     })
 }
@@ -765,12 +760,11 @@ fn run_prompt_eval(options: &PromptEvalOptions) -> Result<(PromptEvalReport, Pat
     let mut candidate_reports = Vec::new();
 
     eprintln!(
-        "prompt-eval: loaded {} case(s), {} candidate(s), {} run(s), {}s timeout per case, edit prepass {}",
+        "prompt-eval: loaded {} case(s), {} candidate(s), {} run(s), {}s timeout per case",
         cases.len(),
         options.candidates.len(),
         options.runs,
-        options.timeout_secs,
-        if options.edit_prepass { "on" } else { "off" }
+        options.timeout_secs
     );
 
     for (candidate_index, candidate) in options.candidates.iter().enumerate() {
@@ -827,7 +821,6 @@ fn run_prompt_eval(options: &PromptEvalOptions) -> Result<(PromptEvalReport, Pat
                             &CleanupContext {
                                 target_app: None,
                                 mode_hint: Some("general dictation".to_string()),
-                                apply_edit_preprocessing: options.edit_prepass,
                             },
                         ),
                     )
@@ -873,7 +866,6 @@ fn run_prompt_eval(options: &PromptEvalOptions) -> Result<(PromptEvalReport, Pat
         suite_path: options.suite.display().to_string(),
         run_count: options.runs,
         timeout_seconds: options.timeout_secs,
-        edit_prepass: options.edit_prepass,
         candidates: candidate_reports,
     };
     let path = write_prompt_eval_report(&report, options.output.as_deref())?;
@@ -1118,7 +1110,6 @@ fn run_flow_once(
                 &CleanupContext {
                     target_app: options.target_app.clone(),
                     mode_hint: Some("general dictation".to_string()),
-                    ..CleanupContext::default()
                 },
             ));
             collector.record("flow_llm_call", started.elapsed());
@@ -1783,7 +1774,7 @@ fn usage() -> &'static str {
   glide-bench stt --audio <wav> --provider <openai|groq|fireworks|elevenlabs|apple_local|parakeet> --model <id> [--runs N] [--warmups N] [--output path]
   glide-bench llm --text <text|@file|file> --provider <openai|groq|cerebras|fireworks|apple_local> --model <id> [--runs N] [--warmups N] [--output path]
   glide-bench flow --audio <wav> [--target-app name] [--style name|default] [--runs N] [--warmups N] [--paste|--no-paste] [--output path]
-  glide-bench prompt-eval --suite <jsonl> --candidate <provider:model> [--candidate <provider:model> ...] [--runs N] [--timeout-secs N] [--no-edit-prepass] [--output path]
+  glide-bench prompt-eval --suite <jsonl> --candidate <provider:model> [--candidate <provider:model> ...] [--runs N] [--timeout-secs N] [--output path]
   glide-bench compare --baseline <json> --candidate <json> [--fail-threshold percent]"
 }
 
@@ -1920,276 +1911,4 @@ fn unix_millis() -> u128 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_prompt_eval_candidate() {
-        let candidate = parse_prompt_eval_candidate("openai:gpt-5.4-nano").unwrap();
-        assert_eq!(candidate.provider, Provider::OpenAi);
-        assert_eq!(candidate.model, "gpt-5.4-nano");
-    }
-
-    #[test]
-    fn rejects_non_llm_prompt_eval_candidate() {
-        let error = parse_prompt_eval_candidate("parakeet:parakeet-tdt-0.6b-v3-int8")
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("Parakeet does not provide an LLM cleanup model"));
-    }
-
-    #[test]
-    fn reads_prompt_eval_jsonl_suite() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("suite.jsonl");
-        fs::write(
-            &path,
-            r#"{"id":"question","style":"default","input":"Can you help","expected":"Can you help?","accepted_outputs":["Can you help."],"forbidden_substrings":["Sure"],"tags":["question"]}
-
-{"id":"scratch","input":"Hello scratch that goodbye","expected":"Goodbye.","tags":["correction"]}"#,
-        )
-        .unwrap();
-
-        let cases = read_prompt_eval_suite(&path).unwrap();
-
-        assert_eq!(cases.len(), 2);
-        assert_eq!(cases[0].id, "question");
-        assert_eq!(cases[0].accepted_outputs, vec!["Can you help."]);
-        assert_eq!(cases[0].forbidden_substrings, vec!["Sure"]);
-        assert_eq!(cases[1].style, "default");
-    }
-
-    #[test]
-    fn scores_prompt_eval_with_normalized_exact_match() {
-        let case = PromptEvalCase {
-            id: "case".to_string(),
-            style: "default".to_string(),
-            input: "Can you help".to_string(),
-            expected: "Can you help?".to_string(),
-            accepted_outputs: Vec::new(),
-            forbidden_substrings: Vec::new(),
-            tags: vec!["question".to_string()],
-        };
-        let normalized = normalize_prompt_eval_text("  Can you\nhelp?  ");
-
-        let (passed, reason) = score_prompt_eval_output(&case, &normalized, "  Can you\nhelp?  ");
-
-        assert!(passed);
-        assert_eq!(reason, "ok");
-    }
-
-    #[test]
-    fn scores_prompt_eval_with_accepted_output_variant() {
-        let case = PromptEvalCase {
-            id: "case".to_string(),
-            style: "default".to_string(),
-            input: "Can you help".to_string(),
-            expected: "Can you help?".to_string(),
-            accepted_outputs: vec!["Can you help.".to_string()],
-            forbidden_substrings: Vec::new(),
-            tags: vec!["question".to_string()],
-        };
-        let normalized = normalize_prompt_eval_text("Can you help.");
-
-        let (passed, reason) = score_prompt_eval_output(&case, &normalized, "Can you help.");
-
-        assert!(passed);
-        assert_eq!(reason, "ok");
-    }
-
-    #[test]
-    fn scores_prompt_eval_forbidden_substring_failure() {
-        let case = PromptEvalCase {
-            id: "case".to_string(),
-            style: "default".to_string(),
-            input: "Can you help".to_string(),
-            expected: "Can you help?".to_string(),
-            accepted_outputs: vec!["Sure, can you help?".to_string()],
-            forbidden_substrings: vec!["Sure".to_string()],
-            tags: vec!["question".to_string()],
-        };
-        let normalized = normalize_prompt_eval_text("Sure, I can help.");
-
-        let (passed, reason) = score_prompt_eval_output(&case, &normalized, "Sure, I can help.");
-
-        assert!(!passed);
-        assert_eq!(reason, "forbidden substring present: Sure");
-    }
-
-    #[test]
-    fn serializes_prompt_eval_provider_error_details() {
-        let case = PromptEvalCase {
-            id: "case".to_string(),
-            style: "default".to_string(),
-            input: "Can you help".to_string(),
-            expected: "Can you help?".to_string(),
-            accepted_outputs: Vec::new(),
-            forbidden_substrings: Vec::new(),
-            tags: vec!["question".to_string()],
-        };
-        let candidate = PromptEvalCandidate {
-            provider: Provider::OpenAi,
-            model: "gpt-5.4-nano".to_string(),
-        };
-
-        let result = prompt_eval_result(
-            &case,
-            0,
-            &candidate,
-            Err(anyhow::anyhow!(
-                "OpenAI chat completions API returned HTTP 400 Bad Request: bad model"
-            )),
-            12.0,
-        );
-        let serialized = serde_json::to_string(&result).unwrap();
-
-        assert!(!result.passed);
-        assert!(result.reason.contains("HTTP 400 Bad Request"));
-        assert!(serialized.contains("bad model"));
-    }
-
-    #[test]
-    fn summarizes_prompt_eval_results_by_tag() {
-        let results = vec![
-            PromptEvalResult {
-                case_id: "one".to_string(),
-                run_index: 0,
-                provider: "OpenAI".to_string(),
-                model: "model".to_string(),
-                style: "default".to_string(),
-                tags: vec!["question".to_string(), "no_answer".to_string()],
-                input: String::new(),
-                expected: String::new(),
-                accepted_outputs: Vec::new(),
-                raw_output: String::new(),
-                normalized_output: String::new(),
-                passed: true,
-                reason: "ok".to_string(),
-                latency_ms: 1.0,
-                error: None,
-            },
-            PromptEvalResult {
-                case_id: "two".to_string(),
-                run_index: 0,
-                provider: "OpenAI".to_string(),
-                model: "model".to_string(),
-                style: "default".to_string(),
-                tags: vec!["question".to_string()],
-                input: String::new(),
-                expected: String::new(),
-                accepted_outputs: Vec::new(),
-                raw_output: String::new(),
-                normalized_output: String::new(),
-                passed: false,
-                reason: "mismatch".to_string(),
-                latency_ms: 1.0,
-                error: None,
-            },
-        ];
-
-        let summary = summarize_prompt_eval_results(&results);
-
-        assert_eq!(summary.total, 2);
-        assert_eq!(summary.passed, 1);
-        assert_eq!(summary.pass_rate, 0.5);
-        assert_eq!(
-            summary
-                .tags
-                .iter()
-                .find(|tag| tag.tag == "question")
-                .unwrap(),
-            &PromptEvalTagSummary {
-                tag: "question".to_string(),
-                total: 2,
-                passed: 1,
-                pass_rate: 0.5,
-            }
-        );
-    }
-
-    #[test]
-    fn disabled_profile_collector_records_nothing() {
-        let collector = ProfileCollector::disabled();
-        collector.record("phase", Duration::from_millis(10));
-        collector.mark("start");
-        collector.record_since_marker("start", "since_start");
-        assert!(collector.spans().is_empty());
-    }
-
-    #[test]
-    fn profile_collector_records_marker_intervals() {
-        let collector = ProfileCollector::enabled();
-        collector.mark("release");
-        std::thread::sleep(Duration::from_millis(1));
-        collector.record_since_marker("release", "release_to_send");
-
-        let spans = collector.spans();
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].phase, "release_to_send");
-        assert!(spans[0].duration_ms > 0.0);
-    }
-
-    #[test]
-    fn loads_recorded_benchmark_audio_fixtures() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let short = load_wav_audio(&root.join("fixtures/benchmark/dictation-short.wav")).unwrap();
-        let long = load_wav_audio(&root.join("fixtures/benchmark/dictation-long.wav")).unwrap();
-
-        assert!(short.metadata.duration_seconds > 6.0);
-        assert!(short.metadata.duration_seconds < 8.0);
-        assert!(long.metadata.duration_seconds > 17.0);
-        assert!(long.metadata.duration_seconds < 19.0);
-        assert!(matches!(short.recorded.format, AudioFormat::Wav));
-        assert!(matches!(long.recorded.format, AudioFormat::Wav));
-    }
-
-    #[test]
-    fn phase_summary_uses_nearest_rank_percentiles() {
-        let summary = phase_summary("phase".to_string(), &[10.0, 50.0, 20.0, 40.0, 30.0], 2);
-        assert_eq!(summary.samples, 5);
-        assert_eq!(summary.errors, 2);
-        assert_eq!(summary.min_ms, 10.0);
-        assert_eq!(summary.median_ms, 30.0);
-        assert_eq!(summary.p95_ms, 50.0);
-        assert_eq!(summary.max_ms, 50.0);
-    }
-
-    #[test]
-    fn compare_reports_flags_regressions() {
-        let baseline = BenchmarkReport {
-            schema_version: 1,
-            mode: "stt".to_string(),
-            generated_at_unix_ms: 1,
-            environment: environment_metadata(),
-            scenario: ScenarioMetadata {
-                provider: None,
-                model: None,
-                run_count: 1,
-                warmup_count: 0,
-                audio: None,
-                text: None,
-                target_app: None,
-                style: None,
-                paste_enabled: false,
-                base_url_host: None,
-            },
-            runs: Vec::new(),
-            summary: vec![PhaseSummary {
-                phase: "phase".to_string(),
-                samples: 1,
-                errors: 0,
-                min_ms: 100.0,
-                median_ms: 100.0,
-                p95_ms: 100.0,
-                max_ms: 100.0,
-            }],
-        };
-        let mut candidate = baseline.clone();
-        candidate.summary[0].median_ms = 130.0;
-        candidate.summary[0].p95_ms = 105.0;
-
-        let result = compare_reports(&baseline, &candidate, 20.0);
-        assert_eq!(result.failures.len(), 1);
-        assert_eq!(result.failures[0].metric, "median");
-    }
-}
+mod tests;
