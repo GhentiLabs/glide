@@ -267,6 +267,13 @@ mod tests {
             assert_eq!(provider.label(), label);
             assert_eq!(provider.default_base_url(), base_url);
         }
+        assert_eq!(
+            Provider::REMOTE
+                .into_iter()
+                .filter_map(Provider::key_id)
+                .collect::<Vec<_>>(),
+            ["openai", "groq", "cerebras", "fireworks", "elevenlabs"]
+        );
     }
 
     #[test]
