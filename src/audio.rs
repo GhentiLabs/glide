@@ -80,7 +80,9 @@ impl AudioRecorder {
             SampleFormat::I16 => device.build_input_stream(
                 &stream_config,
                 move |data: &[i16], _| {
-                    push_i16_frames(data, channels, &capture_target, &live_target)
+                    push_samples(data, channels, &capture_target, &live_target, |s| {
+                        s as f32 / i16::MAX as f32
+                    })
                 },
                 error_callback,
                 None,
@@ -90,7 +92,9 @@ impl AudioRecorder {
                 device.build_input_stream(
                     &stream_config,
                     move |data: &[u16], _| {
-                        push_u16_frames(data, channels, &capture_target, &live_target)
+                        push_samples(data, channels, &capture_target, &live_target, |s| {
+                            (s as f32 / u16::MAX as f32) * 2.0 - 1.0
+                        })
                     },
                     error_callback,
                     None,
@@ -101,7 +105,7 @@ impl AudioRecorder {
                 device.build_input_stream(
                     &stream_config,
                     move |data: &[f32], _| {
-                        push_f32_frames(data, channels, &capture_target, &live_target)
+                        push_samples(data, channels, &capture_target, &live_target, |s| s)
                     },
                     error_callback,
                     None,
@@ -222,52 +226,19 @@ fn resolve_input_device(config: &AudioConfig) -> Result<Device> {
         .with_context(|| format!("input device '{}' was not found", config.device))
 }
 
-fn push_i16_frames(
-    data: &[i16],
+fn push_samples<S: Copy>(
+    data: &[S],
     channels: u16,
     target: &Arc<Mutex<Vec<i16>>>,
     live: &Arc<Mutex<LiveAudioData>>,
+    convert: impl Fn(S) -> f32,
 ) {
     let mut samples = target.lock().expect("samples poisoned");
     let mut live = live.lock().expect("live audio poisoned");
     push_frames(
         data.len(),
         usize::from(channels),
-        |index| data[index] as f32 / i16::MAX as f32,
-        &mut samples,
-        &mut live,
-    );
-}
-
-fn push_u16_frames(
-    data: &[u16],
-    channels: u16,
-    target: &Arc<Mutex<Vec<i16>>>,
-    live: &Arc<Mutex<LiveAudioData>>,
-) {
-    let mut samples = target.lock().expect("samples poisoned");
-    let mut live = live.lock().expect("live audio poisoned");
-    push_frames(
-        data.len(),
-        usize::from(channels),
-        |index| (data[index] as f32 / u16::MAX as f32) * 2.0 - 1.0,
-        &mut samples,
-        &mut live,
-    );
-}
-
-fn push_f32_frames(
-    data: &[f32],
-    channels: u16,
-    target: &Arc<Mutex<Vec<i16>>>,
-    live: &Arc<Mutex<LiveAudioData>>,
-) {
-    let mut samples = target.lock().expect("samples poisoned");
-    let mut live = live.lock().expect("live audio poisoned");
-    push_frames(
-        data.len(),
-        usize::from(channels),
-        |index| data[index],
+        |index| convert(data[index]),
         &mut samples,
         &mut live,
     );
@@ -364,7 +335,7 @@ mod tests {
         let target = Arc::new(Mutex::new(Vec::new()));
         let live = Arc::new(Mutex::new(make_live()));
         let data: Vec<i16> = vec![i16::MAX, i16::MIN];
-        push_i16_frames(&data, 1, &target, &live);
+        push_samples(&data, 1, &target, &live, |s| s as f32 / i16::MAX as f32);
         let samples = target.lock().unwrap();
         assert_eq!(samples.len(), 2);
         assert!(samples[0] > 0);
@@ -373,7 +344,9 @@ mod tests {
         let target = Arc::new(Mutex::new(Vec::new()));
         let live = Arc::new(Mutex::new(make_live()));
         let data: Vec<u16> = vec![u16::MAX / 2];
-        push_u16_frames(&data, 1, &target, &live);
+        push_samples(&data, 1, &target, &live, |s| {
+            (s as f32 / u16::MAX as f32) * 2.0 - 1.0
+        });
         let samples = target.lock().unwrap();
         assert_eq!(samples.len(), 1);
         assert!(samples[0].abs() < 1000);
@@ -381,7 +354,7 @@ mod tests {
         let target = Arc::new(Mutex::new(Vec::new()));
         let live = Arc::new(Mutex::new(make_live()));
         let data: Vec<f32> = vec![0.0, 1.0, -1.0];
-        push_f32_frames(&data, 1, &target, &live);
+        push_samples(&data, 1, &target, &live, |s| s);
         let samples = target.lock().unwrap();
         assert_eq!(samples.len(), 3);
         assert_eq!(samples[0], 0);

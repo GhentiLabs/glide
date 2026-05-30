@@ -6,21 +6,17 @@ use anyhow::Result;
 use crate::{audio, config::GlideConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum OverlayPhase {
-    Hidden,
-    Recording,
-    Processing,
-    Dismissed,
+    Hidden = 0,
+    Recording = 1,
+    Processing = 2,
+    Dismissed = 3,
 }
 
 impl OverlayPhase {
     fn to_u8(self) -> u8 {
-        match self {
-            Self::Hidden => 0,
-            Self::Recording => 1,
-            Self::Processing => 2,
-            Self::Dismissed => 3,
-        }
+        self as u8
     }
 
     fn from_u8(v: u8) -> Self {

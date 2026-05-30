@@ -36,7 +36,7 @@ pub(super) fn fallback_stt_models() -> Vec<ModelInfo> {
 }
 
 pub(super) fn fallback_llm_models() -> Vec<ModelInfo> {
-    let all = vec![
+    let mut all = vec![
         model_info(Provider::OpenAi, "gpt-5.4-nano", false),
         model_info(Provider::OpenAi, "gpt-4o-mini", false),
         model_info(Provider::OpenAi, "gpt-4o", false),
@@ -62,7 +62,6 @@ pub(super) fn fallback_llm_models() -> Vec<ModelInfo> {
         model_info(Provider::Cerebras, "gpt-oss-120b", false),
         model_info(Provider::Cerebras, "llama-4-scout-17b-16e-instruct", false),
     ];
-    let mut all = all;
     all.extend(apple_foundation_model_infos());
     filter_models_by_verified_providers(all)
 }
@@ -111,25 +110,25 @@ pub(super) fn model_info_with_display(
 }
 
 pub fn cached_stt_models() -> Vec<ModelInfo> {
-    let cache = CACHED_STT_MODELS.get_or_init(|| Mutex::new(Vec::new()));
-    let locked = cache.lock().unwrap();
-    if locked.is_empty() {
-        fallback_stt_models()
-    } else {
-        let mut models = locked.clone();
-        models.extend(local_stt_models());
-        filter_models_by_verified_providers(models)
-    }
+    cached_models(&CACHED_STT_MODELS, fallback_stt_models, local_stt_models)
 }
 
 pub fn cached_llm_models() -> Vec<ModelInfo> {
-    let cache = CACHED_LLM_MODELS.get_or_init(|| Mutex::new(Vec::new()));
+    cached_models(&CACHED_LLM_MODELS, fallback_llm_models, local_llm_models)
+}
+
+fn cached_models(
+    cache: &OnceLock<Mutex<Vec<ModelInfo>>>,
+    fallback: fn() -> Vec<ModelInfo>,
+    local: fn() -> Vec<ModelInfo>,
+) -> Vec<ModelInfo> {
+    let cache = cache.get_or_init(|| Mutex::new(Vec::new()));
     let locked = cache.lock().unwrap();
     if locked.is_empty() {
-        fallback_llm_models()
+        fallback()
     } else {
         let mut models = locked.clone();
-        models.extend(local_llm_models());
+        models.extend(local());
         filter_models_by_verified_providers(models)
     }
 }

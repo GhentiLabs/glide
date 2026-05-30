@@ -74,17 +74,7 @@ impl OverlayView {
                             }
                             OverlayPhase::Recording => {
                                 view.mode = OverlayMode::Eq;
-                                let half = view.eq_bars.len().div_ceil(2);
-                                let new_half = compute_eq_bars(&view.shared, half);
-                                let total = view.eq_bars.len();
-                                let mut new_bars = Vec::with_capacity(total);
-                                for i in (0..total / 2).rev() {
-                                    new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
-                                }
-                                for i in 0..total.div_ceil(2) {
-                                    new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
-                                }
-                                new_bars.truncate(total);
+                                let new_bars = mirrored_eq_bars(&view.shared, view.eq_bars.len());
                                 let attack = 0.6;
                                 let decay = 0.12;
                                 for (old, &new) in view.eq_bars.iter_mut().zip(&new_bars) {
@@ -178,6 +168,21 @@ fn render_loading(tick: usize, w: f32, h: f32, bar_color: (f32, f32, f32, f32)) 
 // ---------------------------------------------------------------------------
 // FFT computation
 // ---------------------------------------------------------------------------
+
+/// Builds a left-right mirrored bar array of length `total` from a freshly
+/// sampled half-spectrum, shared by the floating overlay and the notch panel.
+fn mirrored_eq_bars(shared: &SharedState, total: usize) -> Vec<f32> {
+    let new_half = compute_eq_bars(shared, total.div_ceil(2));
+    let mut new_bars = Vec::with_capacity(total);
+    for i in (0..total / 2).rev() {
+        new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
+    }
+    for i in 0..total.div_ceil(2) {
+        new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
+    }
+    new_bars.truncate(total);
+    new_bars
+}
 
 fn compute_eq_bars(shared: &SharedState, bar_count: usize) -> Vec<f32> {
     if bar_count == 0 {
@@ -291,16 +296,8 @@ impl OverlayController {
                         if let Some(ActiveOverlay::Notch(ref state)) = controller.active {
                             match phase {
                                 OverlayPhase::Recording => {
-                                    let half = NOTCH_BAR_COUNT.div_ceil(2);
-                                    let new_half = compute_eq_bars(&controller.shared, half);
-                                    let mut new_bars = Vec::with_capacity(NOTCH_BAR_COUNT);
-                                    for i in (0..NOTCH_BAR_COUNT / 2).rev() {
-                                        new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
-                                    }
-                                    for i in 0..NOTCH_BAR_COUNT.div_ceil(2) {
-                                        new_bars.push(new_half.get(i).copied().unwrap_or(0.0));
-                                    }
-                                    new_bars.truncate(NOTCH_BAR_COUNT);
+                                    let new_bars =
+                                        mirrored_eq_bars(&controller.shared, NOTCH_BAR_COUNT);
                                     let mut s = state.lock().unwrap();
                                     update_notch_bars(&mut s, &new_bars);
                                 }
