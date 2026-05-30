@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 glide = { path = "..", features = ["benchmark-support"] }
+glide-tools = { path = "../glide-tools" }
 anyhow = "1"
 hound = "3"
 serde = { version = "1", features = ["derive"] }

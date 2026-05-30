@@ -5,7 +5,7 @@ edition = "2024"
 description = "A macOS dictation app with spectrum analyzer overlay"
 
 [workspace]
-members = [".", "benchmark"]
+members = [".", "benchmark", "glide-tools"]
 default-members = ["."]
 
 [features]
@@ -54,6 +54,7 @@ keyring = { version = "3", features = ["apple-native"] }
 # Error handling
 anyhow = "1"
 async-trait = "0.1"
+glide-tools = { path = "glide-tools" }
 
 [dev-dependencies]
 tempfile = "3"

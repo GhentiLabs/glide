@@ -13,14 +13,17 @@ mod permissions;
 mod pipeline;
 mod platform;
 mod prewarm;
-mod profile;
 mod startup;
 mod state;
 mod stt;
 mod trace;
 mod ui;
 
-// Benchmark seperate bc I don't like bloat...
+mod profile {
+    pub use glide_tools::{ProfileCollector, SpanRecord};
+}
+
+// Benchmark is separate to keep tool-only code out of the app crate.
 #[cfg(feature = "benchmark-support")]
 pub mod benchmark_support;
 

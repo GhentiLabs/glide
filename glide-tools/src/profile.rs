@@ -93,3 +93,29 @@ impl ProfileCollector {
             .unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::ProfileCollector;
+
+    #[test]
+    fn records_only_when_enabled() {
+        let disabled = ProfileCollector::disabled();
+        disabled.record("phase", Duration::from_millis(10));
+        disabled.mark("start");
+        disabled.record_since_marker("start", "since_start");
+        assert!(disabled.spans().is_empty());
+
+        let enabled = ProfileCollector::enabled();
+        enabled.mark("release");
+        std::thread::sleep(Duration::from_millis(1));
+        enabled.record_since_marker("release", "release_to_send");
+
+        let spans = enabled.spans();
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].phase, "release_to_send");
+        assert!(spans[0].duration_ms > 0.0);
+    }
+}

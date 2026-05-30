@@ -2310,6 +2310,7 @@ dependencies = [
  "bzip2 0.5.2",
  "confy",
  "cpal",
+ "glide-tools",
  "gpui",
  "gpui-component",
  "gpui-component-assets",
@@ -2333,11 +2334,20 @@ version = "0.1.0-beta.1"
 dependencies = [
  "anyhow",
  "glide",
+ "glide-tools",
  "hound",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "glide-tools"
+version = "0.1.0-beta.1"
+dependencies = [
+ "anyhow",
+ "serde",
 ]
 
 [[package]]

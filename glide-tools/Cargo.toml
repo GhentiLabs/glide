@@ -1,0 +1,9 @@
+[package]
+name = "glide-tools"
+version = "0.1.0-beta.1"
+edition = "2024"
+description = "Shared profiling and tool support for Glide"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }

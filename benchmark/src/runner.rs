@@ -6,10 +6,11 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use glide_tools::ProfileCollector;
 
 use glide::benchmark_support::{
-    self as glide_core, AudioFormat, CleanupContext, GlideConfig, ModelSelection, ProfileCollector,
-    RecordedAudio, ReplacementRule,
+    self as glide_core, AudioFormat, CleanupContext, GlideConfig, ModelSelection, RecordedAudio,
+    ReplacementRule,
 };
 
 use super::{

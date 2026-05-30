@@ -7,7 +7,8 @@ mod types;
 
 pub use cli::{parse_cli_args, run_cli};
 pub use compare::{compare_report_files, compare_reports};
-pub use glide::benchmark_support::{ProfileCollector, Provider, SpanRecord};
+pub use glide::benchmark_support::Provider;
+pub use glide_tools::{ProfileCollector, SpanRecord};
 pub use report::{phase_summary, redacted_base_url_host, summarize_runs};
 pub use types::{
     AudioMetadata, BenchCommand, BenchmarkReport, BenchmarkRun, CompareFailure, CompareOptions,
