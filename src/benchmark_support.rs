@@ -26,7 +26,13 @@ pub fn build_llm_provider(
     system_prompt: &str,
     providers: &ProvidersConfig,
 ) -> Result<Box<dyn LlmProvider>> {
-    crate::llm::build_provider(provider, model, system_prompt, providers)
+    crate::llm::build_profiled_provider(
+        provider,
+        model,
+        system_prompt,
+        providers,
+        ProfileCollector::disabled(),
+    )
 }
 
 pub fn build_profiled_llm_provider(

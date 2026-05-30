@@ -127,22 +127,13 @@ async fn process_recording_inner(
 
     let stt_profile = profile_for_trace(&trace);
     let stt_build_started = Instant::now();
-    let stt_provider = if trace.is_enabled() {
-        stt::build_profiled_provider(
-            stt_sel.provider,
-            &stt_sel.model,
-            &config.providers,
-            vocab_prompt,
-            stt_profile.clone(),
-        )
-    } else {
-        stt::build_provider(
-            stt_sel.provider,
-            &stt_sel.model,
-            &config.providers,
-            vocab_prompt,
-        )
-    }
+    let stt_provider = stt::build_profiled_provider(
+        stt_sel.provider,
+        &stt_sel.model,
+        &config.providers,
+        vocab_prompt,
+        stt_profile.clone(),
+    )
     .context("failed to build STT provider");
     trace.record("pipeline_stt_provider_build", stt_build_started.elapsed());
     let stt_provider = stt_provider?;
@@ -205,17 +196,13 @@ async fn process_recording_inner(
         );
         let llm_profile = profile_for_trace(&trace);
         let llm_build_started = Instant::now();
-        let llm_provider = if trace.is_enabled() {
-            llm::build_profiled_provider(
-                llm.provider,
-                &llm.model,
-                system_prompt,
-                &config.providers,
-                llm_profile.clone(),
-            )
-        } else {
-            llm::build_provider(llm.provider, &llm.model, system_prompt, &config.providers)
-        }
+        let llm_provider = llm::build_profiled_provider(
+            llm.provider,
+            &llm.model,
+            system_prompt,
+            &config.providers,
+            llm_profile.clone(),
+        )
         .context("failed to build LLM provider");
         trace.record("pipeline_llm_provider_build", llm_build_started.elapsed());
         let llm_provider = llm_provider?;

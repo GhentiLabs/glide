@@ -23,21 +23,6 @@ pub trait LlmProvider: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-pub fn build_provider(
-    provider: Provider,
-    model: &str,
-    system_prompt: &str,
-    providers: &ProvidersConfig,
-) -> Result<Box<dyn LlmProvider>> {
-    build_profiled_provider(
-        provider,
-        model,
-        system_prompt,
-        providers,
-        ProfileCollector::disabled(),
-    )
-}
-
 pub(crate) fn build_profiled_provider(
     provider: Provider,
     model: &str,

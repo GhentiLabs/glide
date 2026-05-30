@@ -23,7 +23,7 @@ mod profile {
     pub use glide_tools::{ProfileCollector, SpanRecord};
 }
 
-// Benchmark is separate to keep tool-only code out of the app crate.
+// Benchmark is separate cause I don't like bloat.
 #[cfg(feature = "benchmark-support")]
 pub mod benchmark_support;
 

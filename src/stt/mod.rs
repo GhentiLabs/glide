@@ -17,21 +17,6 @@ pub trait SttProvider: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-pub fn build_provider(
-    provider: Provider,
-    model: &str,
-    providers: &ProvidersConfig,
-    vocabulary_prompt: Option<String>,
-) -> Result<Box<dyn SttProvider>> {
-    build_profiled_provider(
-        provider,
-        model,
-        providers,
-        vocabulary_prompt,
-        ProfileCollector::disabled(),
-    )
-}
-
 pub(crate) fn prewarm_provider(provider: Provider, model: &str) -> Result<()> {
     match provider {
         Provider::Parakeet => parakeet::prewarm_model(model),
