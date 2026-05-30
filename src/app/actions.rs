@@ -98,6 +98,12 @@ pub(crate) fn ensure_settings_window(cx: &mut App) {
     }
 }
 
+pub(crate) fn ensure_settings_window_if_initialized(cx: &mut App) {
+    if cx.has_global::<SettingsWindowState>() {
+        ensure_settings_window(cx);
+    }
+}
+
 fn open_about_window(cx: &mut App) {
     let shared = cx.global::<SettingsWindowState>().shared.clone();
     let _ = cx.open_window(

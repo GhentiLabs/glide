@@ -7,9 +7,13 @@ pub use providers::{Provider, ProviderCredentials, ProvidersConfig};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+const CONFIG_APP_NAME: &str = "glide";
+const CONFIG_NAME: &str = "config";
 
 pub fn asset_path(relative: &str) -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
@@ -40,7 +44,8 @@ pub struct GlideConfig {
 
 impl GlideConfig {
     pub fn load_or_create() -> Result<Self> {
-        let mut config: Self = confy::load("glide", "config").unwrap_or_default();
+        let mut config: Self =
+            confy::load(CONFIG_APP_NAME, CONFIG_NAME).context("failed to load Glide config")?;
         let api_keys = load_provider_keys_from_keyring();
         for provider in Provider::REMOTE {
             let Some(key_id) = provider.key_id() else {
@@ -57,11 +62,31 @@ impl GlideConfig {
         self.validate()?;
         #[cfg(not(test))]
         {
-            confy::store("glide", "config", self)
+            confy::store(CONFIG_APP_NAME, CONFIG_NAME, self)
                 .map_err(|e| anyhow::anyhow!("failed to save config: {e}"))?;
             save_provider_keys_to_keyring(&provider_keys_from_config(self));
         }
         Ok(())
+    }
+
+    pub fn config_file_path() -> Result<PathBuf> {
+        confy::get_configuration_file_path(CONFIG_APP_NAME, CONFIG_NAME)
+            .context("failed to locate Glide config file")
+    }
+
+    pub fn reset_to_default() -> Result<Option<PathBuf>> {
+        let path = Self::config_file_path()?;
+        let backup_path = backup_config_file(&path)?;
+
+        #[cfg(not(test))]
+        {
+            let config = Self::default();
+            confy::store(CONFIG_APP_NAME, CONFIG_NAME, &config)
+                .map_err(|e| anyhow::anyhow!("failed to reset config: {e}"))?;
+            save_provider_keys_to_keyring(&provider_keys_from_config(&config));
+        }
+
+        Ok(backup_path)
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -77,6 +102,25 @@ impl GlideConfig {
             "overlay.opacity must be between 0 and 1"
         );
         Ok(())
+    }
+}
+
+fn backup_config_file(path: &std::path::Path) -> Result<Option<PathBuf>> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("config.toml");
+    let backup_path = path.with_file_name(format!("{file_name}.corrupt-{timestamp}.bak"));
+
+    match std::fs::rename(path, &backup_path) {
+        Ok(()) => Ok(Some(backup_path)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error)
+            .with_context(|| format!("failed to back up corrupt config at {}", path.display())),
     }
 }
 

@@ -151,3 +151,26 @@ fn config_toml_file_shape_matches_serialized_defaults() {
     let loaded_raw = toml::to_string_pretty(&loaded).unwrap();
     assert_eq!(raw, loaded_raw);
 }
+
+#[test]
+fn backup_config_file_moves_existing_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    fs::write(&path, "bad config").unwrap();
+
+    let backup = backup_config_file(&path)
+        .unwrap()
+        .expect("existing config should be backed up");
+
+    assert!(!path.exists());
+    assert!(backup.exists());
+    assert_eq!(fs::read_to_string(backup).unwrap(), "bad config");
+}
+
+#[test]
+fn backup_config_file_ignores_missing_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+
+    assert!(backup_config_file(&path).unwrap().is_none());
+}

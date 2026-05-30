@@ -1,4 +1,11 @@
-use std::{sync::Arc, thread, time::Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Instant,
+};
 
 use tokio::runtime::Runtime;
 
@@ -9,6 +16,8 @@ use crate::{
     config::HotkeyTrigger,
     pipeline,
 };
+
+static LISTENER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // macOS virtual keycodes for the trigger keys we care about.
 mod keycode {
@@ -115,6 +124,10 @@ struct TapContext {
 }
 
 pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
+    if LISTENER_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
     thread::spawn(move || {
         shared.set_status(RuntimeStatus::Idle);
 
@@ -143,9 +156,10 @@ pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
 
             if tap.is_null() {
                 let ctx = Box::from_raw(ctx_ptr as *mut TapContext);
+                LISTENER_RUNNING.store(false, Ordering::SeqCst);
                 eprintln!(
-                    "[glide] Failed to create event tap. Grant Accessibility permission in \
-                     System Settings > Privacy & Security > Accessibility and relaunch."
+                    "[glide] Failed to create event tap. Grant Input Monitoring permission in \
+                     System Settings > Privacy & Security > Input Monitoring and relaunch."
                 );
                 ctx.shared.set_error();
                 return;
@@ -161,6 +175,7 @@ pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
             ffi::CFRelease(source);
             ffi::CFRelease(tap);
             let _ = Box::from_raw(ctx_ptr as *mut TapContext);
+            LISTENER_RUNNING.store(false, Ordering::SeqCst);
         }
     });
 }
@@ -256,6 +271,20 @@ fn handle_press(ctx: &mut TapContext) {
     ctx.pressed = true;
     if matches!(ctx.shared.snapshot().status, RuntimeStatus::Processing) {
         return;
+    }
+
+    if !crate::platform::permissions::has_accessibility_access() {
+        if !crate::platform::permissions::request_accessibility_access_or_open_settings() {
+            ctx.pressed = false;
+            eprintln!(
+                "[glide] Accessibility permission is required to paste dictated text. \
+                 Enable Glide in System Settings > Privacy & Security > Accessibility, then try again."
+            );
+            ctx.shared.set_error();
+            ctx.shared
+                .set_overlay_phase(crate::app::state::OverlayPhase::Dismissed);
+            return;
+        }
     }
 
     let microphone_status = crate::platform::permissions::microphone_authorization_status();

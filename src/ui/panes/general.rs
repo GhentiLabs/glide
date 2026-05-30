@@ -393,6 +393,7 @@ impl SettingsApp {
             };
 
             let url = perm.settings_url;
+            let is_accessibility = perm.name == "Accessibility";
             let right_side = if perm.granted {
                 Icon::new(IconName::CircleCheck).size_4().into_any_element()
             } else {
@@ -403,12 +404,23 @@ impl SettingsApp {
                     .child(Icon::new(IconName::CircleX).size_4())
                     .child(
                         Button::new(SharedString::from(format!("open-{}", perm.name)))
-                            .label("Open Settings")
+                            .label(if is_accessibility {
+                                "Request Access"
+                            } else {
+                                "Open Settings"
+                            })
                             .small()
                             .compact()
                             .danger()
-                            .on_click(cx.listener(move |_this, _, _window, _cx| {
-                                let _ = std::process::Command::new("open").arg(url).spawn();
+                            .on_click(cx.listener(move |this, _, _window, cx| {
+                                if is_accessibility {
+                                    crate::platform::permissions::request_accessibility_access_or_open_settings();
+                                } else {
+                                    let _ = std::process::Command::new("open").arg(url).spawn();
+                                }
+                                if this.refresh_permissions() {
+                                    cx.notify();
+                                }
                             })),
                     )
                     .into_any_element()

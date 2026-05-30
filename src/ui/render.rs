@@ -149,6 +149,10 @@ impl Render for SettingsApp {
                                     .ghost()
                                     .small()
                                     .compact()
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        this.shared.refresh_input_devices();
+                                        cx.notify();
+                                    }))
                                     .dropdown_menu(move |menu, _, _| {
                                         let mut m = menu;
                                         for device in &devices {

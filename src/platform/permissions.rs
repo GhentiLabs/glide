@@ -1,6 +1,5 @@
 // --- macOS permission checking via FFI ---
 use std::ffi::{c_char, c_void};
-use std::sync::Once;
 
 // Accessibility: ApplicationServices framework
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -23,8 +22,6 @@ unsafe extern "C" {
     ) -> *const c_void;
     fn CFRelease(cf: *const c_void);
 }
-
-static ACCESSIBILITY_PROMPT: Once = Once::new();
 
 // Input Monitoring: CoreGraphics framework (macOS 10.15+)
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -126,6 +123,10 @@ mod microphone {
 
 pub const MICROPHONE_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+pub const ACCESSIBILITY_SETTINGS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+pub const INPUT_MONITORING_SETTINGS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicrophoneAuthorizationStatus {
@@ -187,12 +188,6 @@ pub fn request_accessibility_access() -> bool {
     }
 }
 
-pub fn request_accessibility_access_once() {
-    ACCESSIBILITY_PROMPT.call_once(|| {
-        let _ = request_accessibility_access();
-    });
-}
-
 /// Check if the app has Input Monitoring permission (needed for global hotkey via CGEventTap).
 pub fn has_input_monitoring_access() -> bool {
     unsafe { CGPreflightListenEventAccess() }
@@ -235,6 +230,21 @@ pub fn open_microphone_settings() {
         .spawn();
 }
 
+pub fn open_accessibility_settings() {
+    let _ = std::process::Command::new("open")
+        .arg(ACCESSIBILITY_SETTINGS_URL)
+        .spawn();
+}
+
+pub fn request_accessibility_access_or_open_settings() -> bool {
+    if has_accessibility_access() || request_accessibility_access() {
+        return true;
+    }
+
+    open_accessibility_settings();
+    false
+}
+
 #[cfg(not(target_os = "macos"))]
 fn cpal_microphone_access() -> bool {
     use cpal::traits::{DeviceTrait, HostTrait};
@@ -270,14 +280,14 @@ pub fn check_all() -> Vec<PermissionStatus> {
             name: "Accessibility",
             description: "Paste transcribed text",
             granted: has_accessibility_access(),
-            settings_url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            settings_url: ACCESSIBILITY_SETTINGS_URL,
             icon: "user",
         },
         PermissionStatus {
             name: "Input Monitoring",
             description: "Global hotkey detection",
             granted: has_input_monitoring_access(),
-            settings_url: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+            settings_url: INPUT_MONITORING_SETTINGS_URL,
             icon: "eye",
         },
     ]

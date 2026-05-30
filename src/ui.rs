@@ -10,6 +10,7 @@
 
 mod about;
 mod builders;
+mod config_recovery;
 mod helpers;
 pub(crate) mod menu;
 pub(crate) mod onboarding;
@@ -30,6 +31,7 @@ use crate::config::Provider;
 use crate::platform::permissions;
 
 pub(crate) use about::AboutView;
+pub(crate) use config_recovery::open_config_recovery_window;
 pub(crate) use theme::apply_theme_preference;
 
 const AUTOSAVE_DELAY: Duration = Duration::from_millis(800);
@@ -154,6 +156,11 @@ impl SettingsApp {
                 );
             }),
         );
+        subs.push(cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() && this.refresh_permissions() {
+                cx.notify();
+            }
+        }));
 
         let shared_for_defaults = shared.clone();
         cx.spawn(async move |this, cx| {
@@ -171,7 +178,6 @@ impl SettingsApp {
         let permission_statuses = permissions::check_all();
         let onboarding_perm_state =
             onboarding::PermissionState::from_statuses(&permission_statuses);
-        Self::start_permission_polling(cx);
 
         Self {
             shared,
@@ -203,39 +209,17 @@ impl SettingsApp {
         }
     }
 
-    fn start_permission_polling(cx: &mut gpui::Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(Duration::from_secs(1)).await;
-                let ok = this.update(cx, |view, cx| {
-                    if view.refresh_permissions() {
-                        cx.notify();
-                    }
-                    true
-                });
-                if ok.is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
-    }
-
     fn refresh_permissions(&mut self) -> bool {
         let next_statuses = permissions::check_all();
         let next_state = onboarding::PermissionState::from_statuses(&next_statuses);
         let statuses_changed = self.permission_statuses != next_statuses;
         let state_changed = self.onboarding_perm_state != next_state;
-        let microphone_changed = self.onboarding_perm_state.microphone != next_state.microphone;
 
         if statuses_changed {
             self.permission_statuses = next_statuses;
         }
         if state_changed {
             self.onboarding_perm_state = next_state;
-        }
-        if microphone_changed {
-            self.shared.refresh_input_devices();
         }
 
         statuses_changed || state_changed

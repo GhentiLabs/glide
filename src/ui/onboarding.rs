@@ -328,21 +328,21 @@ impl SettingsApp {
                 "Microphone",
                 "Capture audio for dictation",
                 self.onboarding_perm_state.microphone,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+                permissions::MICROPHONE_SETTINGS_URL,
                 IconName::Bell,
             ),
             (
                 "Accessibility",
                 "Paste transcribed text",
                 self.onboarding_perm_state.accessibility,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                permissions::ACCESSIBILITY_SETTINGS_URL,
                 IconName::User,
             ),
             (
                 "Input Monitoring",
                 "Global hotkey detection",
                 self.onboarding_perm_state.input_monitoring,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                permissions::INPUT_MONITORING_SETTINGS_URL,
                 IconName::Eye,
             ),
         ];
@@ -383,14 +383,26 @@ impl SettingsApp {
                     .into_any_element()
             } else {
                 let url_owned = url.to_string();
+                let is_accessibility = *name == "Accessibility";
                 Button::new(SharedString::from(format!("open-{name}")))
-                    .label("Open Settings")
+                    .label(if is_accessibility {
+                        "Request Access"
+                    } else {
+                        "Open Settings"
+                    })
                     .small()
                     .compact()
                     .primary()
-                    .on_click(move |_, _, _cx| {
-                        let _ = std::process::Command::new("open").arg(&url_owned).spawn();
-                    })
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        if is_accessibility {
+                            permissions::request_accessibility_access_or_open_settings();
+                        } else {
+                            let _ = std::process::Command::new("open").arg(&url_owned).spawn();
+                        }
+                        if this.refresh_permissions() {
+                            cx.notify();
+                        }
+                    }))
                     .into_any_element()
             };
 
@@ -450,7 +462,7 @@ impl SettingsApp {
                     .max_w(px(400.0))
                     .child(
                         "Glide needs these macOS permissions to work. \
-                         Click each to open System Settings.",
+                         Use each row to grant access or open System Settings.",
                     ),
             )
             .child(card);
