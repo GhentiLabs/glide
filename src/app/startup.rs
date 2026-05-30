@@ -11,8 +11,7 @@ use crate::{
 pub fn run() {
     let app = Application::new().with_assets(gpui_component_assets::Assets);
 
-    // Reopen settings window when dock icon clicked with no windows visible.
-    // During config recovery, the settings window state has not been installed yet.
+    // Reopen settings after startup; no-op while config recovery is active.
     app.on_reopen(move |cx| {
         actions::ensure_settings_window_if_initialized(cx);
     });

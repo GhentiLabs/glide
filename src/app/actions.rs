@@ -8,6 +8,9 @@ use gpui_component::Root;
 
 use crate::{app::state::SharedAppState, ui};
 
+// --- Action definitions ---
+// A lot of these actions are just so we can define the menu bar for macOS
+// (kinda dumb but no menu bar/standard actions is worse sooo...)
 actions!(
     glide,
     [
@@ -26,6 +29,8 @@ actions!(
     ]
 );
 
+// --- Shared action state ---
+
 /// Tracks the settings window so we can reopen/close it specifically.
 // GPUI/macOS does not give this window a stable app-level identity for us.
 struct SettingsWindowState {
@@ -34,6 +39,8 @@ struct SettingsWindowState {
 }
 
 impl Global for SettingsWindowState {}
+
+// --- Startup wiring ---
 
 pub(crate) fn init(cx: &mut App, shared: Arc<SharedAppState>) {
     cx.set_global(SettingsWindowState {
@@ -59,42 +66,15 @@ pub(crate) fn bind_keybindings(cx: &mut App) {
     ]);
 }
 
-fn minimize_active_window(cx: &mut App) {
-    update_active_window(cx, Window::minimize_window);
-}
-
-fn zoom_active_window(cx: &mut App) {
-    update_active_window(cx, Window::zoom_window);
-}
+// --- Settings window entry points ---
 
 pub(crate) fn ensure_settings_window(cx: &mut App) {
-    let state = cx.global_mut::<SettingsWindowState>();
-    // If the handle is still valid, just activate it
-    if let Some(handle) = state.handle
-        && handle
-            .update(cx, |_, window, _| window.activate_window())
-            .is_ok()
-    {
+    if activate_existing_settings_window(cx) {
         return;
     }
-    // Otherwise create a new one
-    let shared = cx.global::<SettingsWindowState>().shared.clone();
-    let shared_for_view = shared.clone();
-    let handle = cx.open_window(
-        WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(1000.0), px(650.0)), cx)),
-            window_min_size: Some(size(px(700.0), px(450.0))),
-            ..Default::default()
-        },
-        |window, cx| {
-            window.set_window_title("Glide");
-            let view = cx.new(|cx| ui::SettingsApp::new(shared_for_view, window, cx));
-            let any_view: gpui::AnyView = view.into();
-            cx.new(|cx| Root::new(any_view, window, cx))
-        },
-    );
-    if let Ok(h) = handle {
-        cx.global_mut::<SettingsWindowState>().handle = Some(h.into());
+
+    if let Some(handle) = open_settings_window(cx) {
+        cx.global_mut::<SettingsWindowState>().handle = Some(handle);
     }
 }
 
@@ -104,8 +84,21 @@ pub(crate) fn ensure_settings_window_if_initialized(cx: &mut App) {
     }
 }
 
+// --- Action handlers ---
+
+fn close_settings_window(cx: &mut App) {
+    let handle = cx.global::<SettingsWindowState>().handle;
+    if let Some(handle) = handle {
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, _| window.remove_window());
+            cx.global_mut::<SettingsWindowState>().handle = None;
+        });
+    }
+}
+
 fn open_about_window(cx: &mut App) {
     let shared = cx.global::<SettingsWindowState>().shared.clone();
+
     let _ = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
@@ -126,14 +119,47 @@ fn open_about_window(cx: &mut App) {
     );
 }
 
-fn close_settings_window(cx: &mut App) {
+fn minimize_active_window(cx: &mut App) {
+    update_active_window(cx, Window::minimize_window);
+}
+
+fn zoom_active_window(cx: &mut App) {
+    update_active_window(cx, Window::zoom_window);
+}
+
+// --- Window helpers ---
+
+fn activate_existing_settings_window(cx: &mut App) -> bool {
     let handle = cx.global::<SettingsWindowState>().handle;
+
     if let Some(handle) = handle {
-        cx.defer(move |cx| {
-            let _ = handle.update(cx, |_, window, _| window.remove_window());
-            cx.global_mut::<SettingsWindowState>().handle = None;
-        });
+        return handle
+            .update(cx, |_, window, _| window.activate_window())
+            .is_ok();
     }
+
+    false
+}
+
+fn open_settings_window(cx: &mut App) -> Option<AnyWindowHandle> {
+    let shared = cx.global::<SettingsWindowState>().shared.clone();
+    let shared_for_view = shared.clone();
+
+    cx.open_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::centered(size(px(1000.0), px(650.0)), cx)),
+            window_min_size: Some(size(px(700.0), px(450.0))),
+            ..Default::default()
+        },
+        |window, cx| {
+            window.set_window_title("Glide");
+            let view = cx.new(|cx| ui::SettingsApp::new(shared_for_view, window, cx));
+            let any_view: gpui::AnyView = view.into();
+            cx.new(|cx| Root::new(any_view, window, cx))
+        },
+    )
+    .ok()
+    .map(Into::into)
 }
 
 fn update_active_window(cx: &mut App, update: impl FnOnce(&Window)) {
