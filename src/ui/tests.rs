@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use gpui::{AppContext, TestAppContext, VisualTestContext};
 
+use crate::app::state::SharedAppState;
 use crate::config::{GlideConfig, ModelSelection, Provider};
-use crate::state::SharedAppState;
 
 fn test_shared_state() -> SharedState {
     Arc::new(SharedAppState::new(GlideConfig::default()))
@@ -180,6 +180,7 @@ mod inputs_autosave {
 
 mod styles {
     use super::*;
+    use crate::config::Style;
 
     #[gpui::test]
     async fn add_style(cx: &mut TestAppContext) {

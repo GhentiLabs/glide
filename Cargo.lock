@@ -2322,6 +2322,7 @@ dependencies = [
  "serde_json",
  "sherpa-onnx",
  "spectrum-analyzer",
+ "strum 0.27.2",
  "tar",
  "tempfile",
  "tokio",

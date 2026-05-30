@@ -1,23 +1,21 @@
-mod actions;
-mod apple_helper;
+//! Glide — macOS push-to-talk dictation.
+
+// Core dictation flow
 mod audio;
 mod config;
-mod hotkey;
-mod llm;
-mod local_models;
-mod menu;
-mod model_catalog;
-mod overlay;
-mod paste;
-mod permissions;
-mod pipeline;
-mod platform;
-mod prewarm;
-mod startup;
-mod state;
-mod stt;
-mod trace;
-mod ui;
+mod pipeline; // record → transcribe → clean up → paste
+
+// Application lifecycle & shared state
+mod app; // startup, state, window actions, tracing
+
+// Speech & text engines
+mod engines; // stt, llm, local_models, model_catalog, apple_helper
+
+// macOS platform integration
+mod platform; // macos APIs, permissions, paste, input/hotkey
+
+// User interface
+mod ui; // settings window, overlay, menu
 
 mod profile {
     pub use glide_tools::{ProfileCollector, SpanRecord};
@@ -28,5 +26,5 @@ mod profile {
 pub mod benchmark_support;
 
 pub fn run() {
-    startup::run();
+    app::startup::run();
 }

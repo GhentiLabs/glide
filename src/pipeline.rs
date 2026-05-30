@@ -3,14 +3,14 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 use crate::{
+    app::state::{RuntimeStatus, SharedState},
+    app::trace::{TraceSession, attrs},
     audio::RecordedAudio,
     config::ReplacementRule,
-    llm::{self, CleanupContext},
-    paste,
+    engines::llm::{self, CleanupContext},
+    engines::stt,
+    platform::paste,
     profile::ProfileCollector,
-    state::{RuntimeStatus, SharedState},
-    stt,
-    trace::{TraceSession, attrs},
 };
 
 fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
@@ -83,10 +83,7 @@ async fn process_recording_inner(
 
     let config = trace.measure("pipeline_config_snapshot", || shared.config());
     trace.measure("pipeline_status_processing", || {
-        shared.set_status(
-            RuntimeStatus::Processing,
-            format!("Transcribing {} samples", audio.sample_count),
-        )
+        shared.set_status(RuntimeStatus::Processing)
     });
 
     // Match style by target app
@@ -262,11 +259,8 @@ async fn process_recording_inner(
         "[glide] Paste: request returned in {} ms",
         elapsed_ms(paste_started)
     );
-    trace.measure("pipeline_set_last_transcript", || {
-        shared.set_last_transcript(cleaned_text.clone())
-    });
     trace.measure("pipeline_status_idle", || {
-        shared.set_status(RuntimeStatus::Idle, "Ready for dictation")
+        shared.set_status(RuntimeStatus::Idle)
     });
     eprintln!(
         "[glide] Pipeline: completed in {} ms",

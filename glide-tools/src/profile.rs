@@ -64,7 +64,6 @@ impl ProfileCollector {
         result
     }
 
-    #[allow(dead_code)]
     pub fn mark(&self, marker: impl Into<String>) {
         if let Some(inner) = &self.inner
             && let Ok(mut markers) = inner.markers.lock()

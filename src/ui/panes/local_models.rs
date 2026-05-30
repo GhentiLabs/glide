@@ -110,7 +110,7 @@ pub(super) fn apple_speech_progress_label(progress: Option<f64>) -> String {
 }
 
 pub(super) fn apple_speech_model_row(
-    status: crate::local_models::AppleSpeechModelStatus,
+    status: crate::engines::local_models::AppleSpeechModelStatus,
     show_not_installed: bool,
     entity: gpui::WeakEntity<SettingsApp>,
     cx: &mut gpui::App,
@@ -126,7 +126,7 @@ pub(super) fn apple_speech_model_row(
     };
 
     let action = match status.state.clone() {
-        crate::local_models::AppleSpeechInstallState::NotInstalled => {
+        crate::engines::local_models::AppleSpeechInstallState::NotInstalled => {
             if !show_not_installed {
                 return None;
             }
@@ -138,7 +138,8 @@ pub(super) fn apple_speech_model_row(
                 .small()
                 .compact()
                 .on_click(move |_, _, cx| {
-                    let _ = crate::local_models::start_apple_speech_model_download(&model_id);
+                    let _ =
+                        crate::engines::local_models::start_apple_speech_model_download(&model_id);
                     let _ = entity.update(cx, |_this, cx| {
                         poll_apple_speech_downloads(cx);
                         cx.notify();
@@ -146,7 +147,7 @@ pub(super) fn apple_speech_model_row(
                 })
                 .into_any_element()
         }
-        crate::local_models::AppleSpeechInstallState::Downloading { progress } => div()
+        crate::engines::local_models::AppleSpeechInstallState::Downloading { progress } => div()
             .flex()
             .items_center()
             .gap_2()
@@ -160,7 +161,7 @@ pub(super) fn apple_speech_model_row(
                     .child(apple_speech_progress_label(progress)),
             )
             .into_any_element(),
-        crate::local_models::AppleSpeechInstallState::Cancelling => div()
+        crate::engines::local_models::AppleSpeechInstallState::Cancelling => div()
             .flex()
             .items_center()
             .gap_2()
@@ -174,7 +175,7 @@ pub(super) fn apple_speech_model_row(
                     .child("Cancelling..."),
             )
             .into_any_element(),
-        crate::local_models::AppleSpeechInstallState::Installed => {
+        crate::engines::local_models::AppleSpeechInstallState::Installed => {
             let model_id = model_id.clone();
             let entity = entity.clone();
             div()
@@ -195,14 +196,15 @@ pub(super) fn apple_speech_model_row(
                         .ghost()
                         .tooltip("Delete locale")
                         .on_click(move |_, _, cx| {
-                            let _ = crate::local_models::release_apple_speech_model(&model_id);
+                            let _ =
+                                crate::engines::local_models::release_apple_speech_model(&model_id);
                             let deleted_model = model_id.clone();
                             let _ = entity.update(cx, |this, cx| {
                                 let _ = this.shared.update_config(|config| {
                                     if config.dictation.stt.provider == Provider::AppleLocal
                                         && config.dictation.stt.model == deleted_model
                                         && let Some(default) =
-                                            crate::model_catalog::smart_stt_default()
+                                            crate::engines::model_catalog::smart_stt_default()
                                     {
                                         config.dictation.stt = default;
                                     }
@@ -226,7 +228,7 @@ pub(super) fn apple_speech_model_row(
                 )
                 .into_any_element()
         }
-        crate::local_models::AppleSpeechInstallState::Failed(error) => {
+        crate::engines::local_models::AppleSpeechInstallState::Failed(error) => {
             let model_id = model_id.clone();
             let entity = entity.clone();
             div()
@@ -246,8 +248,9 @@ pub(super) fn apple_speech_model_row(
                         .small()
                         .compact()
                         .on_click(move |_, _, cx| {
-                            let _ =
-                                crate::local_models::start_apple_speech_model_download(&model_id);
+                            let _ = crate::engines::local_models::start_apple_speech_model_download(
+                                &model_id,
+                            );
                             let _ = entity.update(cx, |_this, cx| {
                                 poll_apple_speech_downloads(cx);
                                 cx.notify();
@@ -316,33 +319,35 @@ pub(super) enum ParakeetRowActionKind {
 
 #[cfg(test)]
 pub(super) fn parakeet_row_action_kind(
-    state: &crate::local_models::LocalModelInstallState,
+    state: &crate::engines::local_models::LocalModelInstallState,
 ) -> ParakeetRowActionKind {
     match state {
-        crate::local_models::LocalModelInstallState::NotInstalled => {
+        crate::engines::local_models::LocalModelInstallState::NotInstalled => {
             ParakeetRowActionKind::Download
         }
-        crate::local_models::LocalModelInstallState::Downloading { .. } => {
+        crate::engines::local_models::LocalModelInstallState::Downloading { .. } => {
             ParakeetRowActionKind::Cancel
         }
-        crate::local_models::LocalModelInstallState::Cancelling { .. } => {
+        crate::engines::local_models::LocalModelInstallState::Cancelling { .. } => {
             ParakeetRowActionKind::None
         }
-        crate::local_models::LocalModelInstallState::Installed { .. } => {
+        crate::engines::local_models::LocalModelInstallState::Installed { .. } => {
             ParakeetRowActionKind::Delete
         }
-        crate::local_models::LocalModelInstallState::Failed(_) => ParakeetRowActionKind::Retry,
+        crate::engines::local_models::LocalModelInstallState::Failed(_) => {
+            ParakeetRowActionKind::Retry
+        }
     }
 }
 
 pub(super) fn parakeet_model_row(
-    status: crate::local_models::ParakeetModelStatus,
+    status: crate::engines::local_models::ParakeetModelStatus,
     cx: &mut gpui::Context<SettingsApp>,
 ) -> gpui::Div {
     let model_id = status.definition.id.to_string();
     let state = status.state.clone();
     let action = match state {
-        crate::local_models::LocalModelInstallState::NotInstalled => {
+        crate::engines::local_models::LocalModelInstallState::NotInstalled => {
             let model_id = model_id.clone();
             Button::new(SharedString::from(format!("download-{model_id}")))
                 .label("Download")
@@ -350,13 +355,13 @@ pub(super) fn parakeet_model_row(
                 .small()
                 .compact()
                 .on_click(cx.listener(move |_this, _, _window, cx| {
-                    let _ = crate::local_models::start_parakeet_download(&model_id);
+                    let _ = crate::engines::local_models::start_parakeet_download(&model_id);
                     poll_parakeet_downloads(cx);
                     cx.notify();
                 }))
                 .into_any_element()
         }
-        crate::local_models::LocalModelInstallState::Downloading {
+        crate::engines::local_models::LocalModelInstallState::Downloading {
             downloaded_bytes,
             total_bytes,
         } => {
@@ -391,14 +396,16 @@ pub(super) fn parakeet_model_row(
                         .ghost()
                         .tooltip("Cancel download")
                         .on_click(cx.listener(move |_this, _, _window, cx| {
-                            let _ = crate::local_models::cancel_parakeet_download(&cancel_model_id);
+                            let _ = crate::engines::local_models::cancel_parakeet_download(
+                                &cancel_model_id,
+                            );
                             poll_parakeet_downloads(cx);
                             cx.notify();
                         })),
                 )
                 .into_any_element()
         }
-        crate::local_models::LocalModelInstallState::Cancelling { .. } => div()
+        crate::engines::local_models::LocalModelInstallState::Cancelling { .. } => div()
             .flex()
             .items_center()
             .gap_2()
@@ -412,7 +419,7 @@ pub(super) fn parakeet_model_row(
                     .child("Cancelling..."),
             )
             .into_any_element(),
-        crate::local_models::LocalModelInstallState::Installed { size_bytes } => {
+        crate::engines::local_models::LocalModelInstallState::Installed { size_bytes } => {
             let model_id = model_id.clone();
             div()
                 .flex()
@@ -432,12 +439,13 @@ pub(super) fn parakeet_model_row(
                         .danger()
                         .tooltip("Delete model")
                         .on_click(cx.listener(move |this, _, _window, cx| {
-                            let _ = crate::local_models::delete_parakeet_model(&model_id);
+                            let _ = crate::engines::local_models::delete_parakeet_model(&model_id);
                             let deleted_model = model_id.clone();
                             let _ = this.shared.update_config(|config| {
                                 if config.dictation.stt.provider == Provider::Parakeet
                                     && config.dictation.stt.model == deleted_model
-                                    && let Some(default) = crate::model_catalog::smart_stt_default()
+                                    && let Some(default) =
+                                        crate::engines::model_catalog::smart_stt_default()
                                 {
                                     config.dictation.stt = default;
                                 }
@@ -460,7 +468,7 @@ pub(super) fn parakeet_model_row(
                 )
                 .into_any_element()
         }
-        crate::local_models::LocalModelInstallState::Failed(error) => {
+        crate::engines::local_models::LocalModelInstallState::Failed(error) => {
             let model_id = model_id.clone();
             div()
                 .flex()
@@ -479,7 +487,8 @@ pub(super) fn parakeet_model_row(
                         .small()
                         .compact()
                         .on_click(cx.listener(move |_this, _, _window, cx| {
-                            let _ = crate::local_models::start_parakeet_download(&model_id);
+                            let _ =
+                                crate::engines::local_models::start_parakeet_download(&model_id);
                             poll_parakeet_downloads(cx);
                             cx.notify();
                         })),
@@ -538,13 +547,13 @@ pub(super) fn poll_parakeet_downloads(cx: &mut gpui::Context<SettingsApp>) {
             cx.background_executor()
                 .timer(Duration::from_millis(750))
                 .await;
-            let downloading = crate::local_models::parakeet_models_status()
+            let downloading = crate::engines::local_models::parakeet_models_status()
                 .iter()
                 .any(|status| {
                     matches!(
                         status.state,
-                        crate::local_models::LocalModelInstallState::Downloading { .. }
-                            | crate::local_models::LocalModelInstallState::Cancelling { .. }
+                        crate::engines::local_models::LocalModelInstallState::Downloading { .. }
+                            | crate::engines::local_models::LocalModelInstallState::Cancelling { .. }
                     )
                 });
             let _ = this.update(cx, |_this, cx| cx.notify());
@@ -562,7 +571,7 @@ pub(super) fn poll_apple_speech_downloads(cx: &mut gpui::Context<SettingsApp>) {
             cx.background_executor()
                 .timer(Duration::from_millis(750))
                 .await;
-            let downloading = crate::local_models::apple_speech_has_active_downloads();
+            let downloading = crate::engines::local_models::apple_speech_has_active_downloads();
             let _ = this.update(cx, |_this, cx| cx.notify());
             if !downloading {
                 break;
@@ -591,7 +600,7 @@ pub(super) fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::local_models::LocalModelInstallState;
+    use crate::engines::local_models::LocalModelInstallState;
 
     #[test]
     fn parakeet_row_action_kind_matches_install_state() {

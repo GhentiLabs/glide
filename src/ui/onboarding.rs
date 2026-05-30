@@ -9,7 +9,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
 
 use crate::config::HotkeyTrigger;
-use crate::permissions;
+use crate::platform::permissions;
 
 // ---------------------------------------------------------------------------
 // OS-dependent hotkey presets

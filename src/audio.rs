@@ -10,9 +10,9 @@ use cpal::{
 };
 
 use crate::{
+    app::state::LiveAudioData,
+    app::trace::{TraceSession, attrs},
     config::AudioConfig,
-    state::LiveAudioData,
-    trace::{TraceSession, attrs},
 };
 
 const RING_BUFFER_SIZE: usize = 8192;
@@ -37,7 +37,6 @@ struct ActiveRecording {
     stream: Stream,
     samples: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
-    #[allow(dead_code)] // Kept alive so the overlay can read it via SharedAppState
     live_audio: Arc<Mutex<LiveAudioData>>,
 }
 

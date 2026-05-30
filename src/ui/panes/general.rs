@@ -7,8 +7,8 @@ use gpui_component::Sizable;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
 
+use crate::app::state::AppSnapshot;
 use crate::config::{ColorAccent, HotkeyTrigger, OverlayStyle, ThemePreference};
-use crate::state::AppSnapshot;
 
 use super::super::helpers::*;
 use super::super::{SettingsApp, apply_theme_preference};

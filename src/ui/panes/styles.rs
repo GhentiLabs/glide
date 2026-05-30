@@ -29,12 +29,12 @@ impl SettingsApp {
         let default_llm = default_llm_selection
             .map(|s| s.model.clone())
             .unwrap_or_else(|| "Disabled".to_string());
-        let stt_models = crate::model_catalog::cached_stt_models();
-        let llm_models = crate::model_catalog::cached_llm_models();
+        let stt_models = crate::engines::model_catalog::cached_stt_models();
+        let llm_models = crate::engines::model_catalog::cached_llm_models();
 
         let shared_stt = self.shared.clone();
         let shared_llm = self.shared.clone();
-        let has_provider = crate::model_catalog::any_provider_verified();
+        let has_provider = crate::engines::model_catalog::any_provider_verified();
 
         let prompt_expanded = self.prompt_expanded;
         let default_prompt_entity = self.default_prompt.clone();
@@ -82,9 +82,9 @@ impl SettingsApp {
                     })
                     .when(has_provider, |this| {
                         let recommended_stt =
-                            crate::model_catalog::smart_stt_default().map(|s| s.model);
+                            crate::engines::model_catalog::smart_stt_default().map(|s| s.model);
                         let recommended_llm =
-                            crate::model_catalog::smart_llm_default().map(|s| s.model);
+                            crate::engines::model_catalog::smart_llm_default().map(|s| s.model);
                         this.child(setting_row("Voice Model", "Speech-to-text", cx).child(
                             model_dropdown_button(
                                 "default-stt",

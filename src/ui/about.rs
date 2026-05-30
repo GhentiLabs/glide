@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{Window, div, img, px};
 use gpui_component::ActiveTheme;
 
-use crate::state::SharedState;
+use crate::app::state::SharedState;
 
 pub(crate) struct AboutView {
     shared: SharedState,
