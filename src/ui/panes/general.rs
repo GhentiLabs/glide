@@ -26,7 +26,7 @@ impl SettingsApp {
 
         let mut container = div().flex().flex_col().gap_4();
 
-        // -- Recording Window --
+        // --- Recording window ---
         let mut style_cards = div().flex().gap_3().flex_1();
         let is_macos = cfg!(target_os = "macos");
         let has_notch = crate::platform::notch_width().is_some();
@@ -148,7 +148,7 @@ impl SettingsApp {
             ),
         );
 
-        // -- Keyboard Shortcuts --
+        // --- Keyboard shortcuts ---
         let hotkey_label = current_trigger
             .map(|t| t.label())
             .unwrap_or_else(|| "Not Set".to_string());
@@ -304,7 +304,7 @@ impl SettingsApp {
             ),
         );
 
-        // -- Appearance --
+        // --- Appearance ---
         container = container.child(
             section_block("Appearance", cx).child(
                 settings_card(cx)
@@ -378,7 +378,7 @@ impl SettingsApp {
             ),
         );
 
-        // -- Permissions --
+        // --- Permissions ---
         let perms = &self.permission_statuses;
         let mut perm_card = settings_card(cx);
         for (i, perm) in perms.iter().enumerate() {

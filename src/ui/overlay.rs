@@ -28,9 +28,7 @@ impl OverlayHandle {
 
 impl Global for OverlayHandle {}
 
-// ---------------------------------------------------------------------------
-// GPUI overlay view (floating mode)
-// ---------------------------------------------------------------------------
+// --- GPUI overlay view ---
 
 #[derive(PartialEq)]
 enum OverlayMode {
@@ -175,9 +173,7 @@ fn render_loading(tick: usize, w: f32, h: f32, bar_color: (f32, f32, f32, f32)) 
         }))
 }
 
-// ---------------------------------------------------------------------------
-// FFT computation
-// ---------------------------------------------------------------------------
+// --- FFT computation ---
 
 /// Builds a left-right mirrored bar array of length `total` from a freshly
 /// sampled half-spectrum, shared by the floating overlay and the notch panel.
@@ -260,9 +256,7 @@ fn compute_eq_bars(shared: &SharedState, bar_count: usize) -> Vec<f32> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Overlay controller
-// ---------------------------------------------------------------------------
+// --- Overlay controller ---
 
 enum ActiveOverlay {
     Gpui(WindowHandle<OverlayView>),

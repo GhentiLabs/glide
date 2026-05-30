@@ -19,7 +19,8 @@ use crate::{
 
 static LISTENER_RUNNING: AtomicBool = AtomicBool::new(false);
 
-// macOS virtual keycodes for the trigger keys we care about.
+// --- Hotkey constants ---
+
 mod keycode {
     pub const OPTION_LEFT: u16 = 58;
     pub const OPTION_RIGHT: u16 = 61;
@@ -36,7 +37,7 @@ mod flags {
     pub const COMMAND: u64 = 0x00100000; // NSEventModifierFlagCommand
 }
 
-// --- Minimal CoreGraphics / CoreFoundation FFI -----------------------------------
+// --- CoreGraphics / CoreFoundation FFI ---
 
 #[allow(non_upper_case_globals)]
 mod ffi {
@@ -113,7 +114,8 @@ mod ffi {
     }
 }
 
-// State passed through CGEventTap user_info pointer.
+// --- Listener state ---
+
 struct TapContext {
     shared: SharedState,
     runtime: Arc<Runtime>,
@@ -122,6 +124,8 @@ struct TapContext {
     /// Whether the toggle key has started a recording (press once to start, again to stop).
     toggled: bool,
 }
+
+// --- Listener entry point ---
 
 pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
     if LISTENER_RUNNING.swap(true, Ordering::SeqCst) {
@@ -180,6 +184,8 @@ pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
     });
 }
 
+// --- Event tap callback ---
+
 unsafe extern "C" fn event_tap_callback(
     _proxy: ffi::CGEventTapProxy,
     event_type: u32,
@@ -213,9 +219,7 @@ unsafe extern "C" fn event_tap_callback(
     let hold_trigger = config.hotkey.trigger;
     let toggle_trigger = config.hotkey.toggle_trigger;
 
-    // Check if this keycode matches the hold-to-record trigger
     let is_hold = hold_trigger.is_some_and(|t| is_trigger_keycode(t, keycode));
-    // Check if this keycode matches the toggle trigger
     let is_toggle = toggle_trigger.is_some_and(|t| is_trigger_keycode(t, keycode));
 
     match event_type {
@@ -223,11 +227,9 @@ unsafe extern "C" fn event_tap_callback(
             if is_hold && !ctx.pressed {
                 handle_press(ctx);
             } else if is_toggle && !ctx.toggled {
-                // First press: start recording
                 ctx.toggled = true;
                 handle_press(ctx);
             } else if is_toggle && ctx.toggled {
-                // Second press: stop and process
                 ctx.toggled = false;
                 handle_release(ctx);
             }
@@ -266,6 +268,8 @@ unsafe extern "C" fn event_tap_callback(
 
     event
 }
+
+// --- Recording handlers ---
 
 fn handle_press(ctx: &mut TapContext) {
     ctx.pressed = true;
@@ -438,6 +442,8 @@ fn handle_release(ctx: &mut TapContext) {
         }
     }
 }
+
+// --- Trigger helpers ---
 
 fn is_trigger_keycode(trigger: HotkeyTrigger, keycode: u16) -> bool {
     match trigger {

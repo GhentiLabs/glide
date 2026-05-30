@@ -13,35 +13,7 @@ use crate::{
     profile::ProfileCollector,
 };
 
-fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
-    let mut result = text.to_string();
-    for rule in replacements {
-        if rule.find.is_empty() {
-            continue;
-        }
-        if rule.case_sensitive {
-            result = result.replace(&rule.find, &rule.replace);
-        } else {
-            let mut output = String::with_capacity(result.len());
-            let lower_find = rule.find.to_lowercase();
-            let mut search_start = 0;
-            let lower_result = result.to_lowercase();
-            while let Some(pos) = lower_result[search_start..].find(&lower_find) {
-                let abs_pos = search_start + pos;
-                output.push_str(&result[search_start..abs_pos]);
-                output.push_str(&rule.replace);
-                search_start = abs_pos + rule.find.len();
-            }
-            output.push_str(&result[search_start..]);
-            result = output;
-        }
-    }
-    result
-}
-
-fn elapsed_ms(started: Instant) -> u128 {
-    started.elapsed().as_millis()
-}
+// --- Pipeline entry points ---
 
 pub async fn process_recording(
     shared: SharedState,
@@ -86,7 +58,6 @@ async fn process_recording_inner(
         shared.set_status(RuntimeStatus::Processing)
     });
 
-    // Match style by target app
     let matched_style = trace.measure("pipeline_style_resolution", || {
         target_app.as_ref().and_then(|target| {
             config
@@ -97,7 +68,6 @@ async fn process_recording_inner(
         })
     });
 
-    // Resolve effective STT settings
     let stt_sel = matched_style
         .and_then(|s| s.stt.as_ref())
         .unwrap_or(&config.dictation.stt);
@@ -171,7 +141,6 @@ async fn process_recording_inner(
         elapsed_ms(stt_started)
     );
 
-    // Resolve effective LLM settings
     let llm_sel = matched_style
         .and_then(|s| s.llm.as_ref())
         .or(config.dictation.llm.as_ref());
@@ -267,6 +236,38 @@ async fn process_recording_inner(
         elapsed_ms(pipeline_started)
     );
     Ok(())
+}
+
+// --- Pipeline helpers ---
+
+fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
+    let mut result = text.to_string();
+    for rule in replacements {
+        if rule.find.is_empty() {
+            continue;
+        }
+        if rule.case_sensitive {
+            result = result.replace(&rule.find, &rule.replace);
+        } else {
+            let mut output = String::with_capacity(result.len());
+            let lower_find = rule.find.to_lowercase();
+            let mut search_start = 0;
+            let lower_result = result.to_lowercase();
+            while let Some(pos) = lower_result[search_start..].find(&lower_find) {
+                let abs_pos = search_start + pos;
+                output.push_str(&result[search_start..abs_pos]);
+                output.push_str(&rule.replace);
+                search_start = abs_pos + rule.find.len();
+            }
+            output.push_str(&result[search_start..]);
+            result = output;
+        }
+    }
+    result
+}
+
+fn elapsed_ms(started: Instant) -> u128 {
+    started.elapsed().as_millis()
 }
 
 fn profile_for_trace(trace: &TraceSession) -> ProfileCollector {

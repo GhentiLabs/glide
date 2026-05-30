@@ -7,9 +7,7 @@ use anyhow::{Context as _, Result};
 
 use crate::config::{ColorAccent, asset_path};
 
-// ---------------------------------------------------------------------------
-// Objective-C runtime FFI
-// ---------------------------------------------------------------------------
+// --- Objective-C runtime FFI ---
 
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
@@ -38,9 +36,7 @@ struct NSRect {
 
 type MsgSendRect = unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSRect;
 
-// ---------------------------------------------------------------------------
-// Application listing
-// ---------------------------------------------------------------------------
+// --- Application listing ---
 
 pub fn list_applications() -> Vec<String> {
     let mut apps: Vec<String> = std::fs::read_dir("/Applications")
@@ -62,9 +58,7 @@ pub fn list_applications() -> Vec<String> {
     apps
 }
 
-// ---------------------------------------------------------------------------
-// App icon extraction
-// ---------------------------------------------------------------------------
+// --- App icon extraction ---
 
 static ICON_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -267,9 +261,7 @@ fn write_nsimage_png(image: *mut c_void, dest: &Path) -> Result<()> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Fuzzy matching
-// ---------------------------------------------------------------------------
+// --- Fuzzy matching ---
 
 pub fn fuzzy_match(query: &str, candidate: &str) -> Option<i32> {
     if query.is_empty() {
@@ -292,9 +284,7 @@ pub fn fuzzy_match(query: &str, candidate: &str) -> Option<i32> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Frontmost app detection
-// ---------------------------------------------------------------------------
+// --- Frontmost app detection ---
 
 pub fn frontmost_app_name() -> Option<String> {
     let msg1: MsgSendPtr = unsafe { std::mem::transmute(objc_msgSend as *const ()) };
@@ -341,9 +331,7 @@ pub fn frontmost_app_name() -> Option<String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Screen size
-// ---------------------------------------------------------------------------
+// --- Screen size ---
 
 unsafe extern "C" {
     fn CGMainDisplayID() -> u32;
@@ -358,9 +346,7 @@ pub fn main_display_size() -> (usize, usize) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Notch detection
-// ---------------------------------------------------------------------------
+// --- Notch detection ---
 
 pub fn notch_width() -> Option<u32> {
     unsafe {

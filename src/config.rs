@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 const CONFIG_APP_NAME: &str = "glide";
 const CONFIG_NAME: &str = "config";
 
+// --- Config loading ---
+
 pub fn asset_path(relative: &str) -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
     let bundle_resources = exe
@@ -124,9 +126,7 @@ fn backup_config_file(path: &std::path::Path) -> Result<Option<PathBuf>> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// App config
-// ---------------------------------------------------------------------------
+// --- App config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -273,9 +273,7 @@ impl ColorAccent {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Hotkey config
-// ---------------------------------------------------------------------------
+// --- Hotkey config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -411,9 +409,7 @@ pub fn modifier_flag_for_keycode(code: u16) -> u64 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Audio config
-// ---------------------------------------------------------------------------
+// --- Audio config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -433,9 +429,7 @@ impl Default for AudioConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Overlay config
-// ---------------------------------------------------------------------------
+// --- Overlay config ---
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -497,9 +491,7 @@ impl Default for OverlayConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Paste config
-// ---------------------------------------------------------------------------
+// --- Paste config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -517,9 +509,7 @@ impl Default for PasteConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Keyring helpers
-// ---------------------------------------------------------------------------
+// --- Keyring helpers ---
 
 const KEYRING_SERVICE: &str = "glide";
 const KEYRING_ACCOUNT: &str = "provider-api-keys";

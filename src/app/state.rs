@@ -5,6 +5,8 @@ use anyhow::Result;
 
 use crate::{audio, config::GlideConfig};
 
+// --- Runtime types ---
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 pub enum RuntimeStatus {
     Starting,
@@ -36,6 +38,8 @@ pub struct AppSnapshot {
     pub input_devices: Vec<String>,
 }
 
+// --- Shared state ---
+
 pub struct SharedAppState {
     inner: Mutex<AppState>,
     hotkey_recording: Mutex<HotkeyRecordingState>,
@@ -59,6 +63,8 @@ enum HotkeyRecordingState {
     Recording,
     Recorded(u16),
 }
+
+// --- State implementation ---
 
 impl SharedAppState {
     pub fn new(config: GlideConfig) -> Self {
@@ -192,6 +198,8 @@ impl SharedAppState {
         self.live_audio.lock().expect("live_audio poisoned").clone()
     }
 }
+
+// --- Shared alias ---
 
 pub type SharedState = Arc<SharedAppState>;
 

@@ -17,7 +17,6 @@ pub fn apply_theme_preference(
         ThemePreference::Dark => Theme::change(ThemeMode::Dark, window, cx),
     }
 
-    // Apply accent color overrides on top of the base light/dark theme
     let (h, s, l, a) = accent.primary_hsla();
     let (hh, sh, lh, ah) = accent.primary_hover_hsla();
     let (ha, sa, la, aa) = accent.primary_active_hsla();

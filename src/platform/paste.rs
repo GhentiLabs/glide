@@ -8,17 +8,16 @@ use arboard::Clipboard;
 
 use crate::config::PasteConfig;
 
-// --- CoreGraphics FFI for keyboard event simulation ---
-
 const CLIPBOARD_SETTLE_DELAY_MS: u64 = 50;
 const MIN_RESTORE_DELAY_MS: u64 = 750;
+
+// --- CoreGraphics FFI ---
 
 type CGEventRef = *mut std::ffi::c_void;
 type CGEventSourceRef = *mut std::ffi::c_void;
 
 const K_CG_HID_EVENT_TAP: u32 = 0;
 const K_CG_EVENT_FLAG_MASK_COMMAND: u64 = 0x00100000;
-// macOS virtual keycode for 'V'
 const KVK_V: u16 = 9;
 
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -36,6 +35,38 @@ unsafe extern "C" {
 unsafe extern "C" {
     fn CFRelease(cf: *const std::ffi::c_void);
 }
+
+// --- Paste entry point ---
+
+pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
+    anyhow::ensure!(
+        crate::platform::permissions::has_accessibility_access(),
+        "Accessibility permission required for paste. Grant access in \
+         System Settings > Privacy & Security > Accessibility and relaunch."
+    );
+
+    let mut clipboard = Clipboard::new().context("failed to access clipboard")?;
+    let previous_text = if config.restore_clipboard {
+        clipboard.get_text().ok()
+    } else {
+        None
+    };
+
+    clipboard
+        .set_text(text.to_string())
+        .context("failed to update clipboard")?;
+
+    thread::sleep(Duration::from_millis(CLIPBOARD_SETTLE_DELAY_MS));
+    simulate_paste();
+
+    if let Some(previous_text) = previous_text {
+        restore_clipboard_async(previous_text, restore_delay(config));
+    }
+
+    Ok(())
+}
+
+// --- Paste helpers ---
 
 /// Simulate Cmd+V using CoreGraphics keyboard events.
 fn simulate_paste() {
@@ -87,34 +118,6 @@ fn restore_clipboard_async(previous_text: String, delay: Duration) {
             Err(error) => eprintln!("[glide] Paste: failed to restore clipboard: {error:#}"),
         }
     });
-}
-
-pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
-    anyhow::ensure!(
-        crate::platform::permissions::has_accessibility_access(),
-        "Accessibility permission required for paste. Grant access in \
-         System Settings > Privacy & Security > Accessibility and relaunch."
-    );
-
-    let mut clipboard = Clipboard::new().context("failed to access clipboard")?;
-    let previous_text = if config.restore_clipboard {
-        clipboard.get_text().ok()
-    } else {
-        None
-    };
-
-    clipboard
-        .set_text(text.to_string())
-        .context("failed to update clipboard")?;
-
-    thread::sleep(Duration::from_millis(CLIPBOARD_SETTLE_DELAY_MS));
-    simulate_paste();
-
-    if let Some(previous_text) = previous_text {
-        restore_clipboard_async(previous_text, restore_delay(config));
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

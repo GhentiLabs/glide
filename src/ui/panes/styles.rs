@@ -22,7 +22,7 @@ impl SettingsApp {
         let available_apps = crate::platform::list_applications();
         let mut container = div().flex().flex_col().gap_4();
 
-        // -- Default Prompt & Models --
+        // --- Default prompt & models ---
         let snapshot = self.shared.snapshot();
         let default_stt = snapshot.config.dictation.stt.model.clone();
         let default_llm_selection = snapshot.config.dictation.llm.as_ref();
@@ -124,7 +124,7 @@ impl SettingsApp {
             ),
         );
 
-        // -- Styles (accordion cards) --
+        // --- Styles ---
         for (index, style) in self.styles.iter().enumerate() {
             let is_expanded = self.expanded_style == Some(index);
             let style_prompt_expanded = style.prompt_expanded;
@@ -490,7 +490,7 @@ impl SettingsApp {
             );
         }
 
-        // -- Add Style button --
+        // --- Add style button ---
         container = container.child(
             div().child(
                 Button::new("add-style")

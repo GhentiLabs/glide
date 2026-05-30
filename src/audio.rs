@@ -17,6 +17,8 @@ use crate::{
 
 const RING_BUFFER_SIZE: usize = 8192;
 
+// --- Audio types ---
+
 #[derive(Debug, Clone, Copy)]
 pub enum AudioFormat {
     Wav,
@@ -39,6 +41,8 @@ struct ActiveRecording {
     sample_rate: u32,
     live_audio: Arc<Mutex<LiveAudioData>>,
 }
+
+// --- Recorder lifecycle ---
 
 impl AudioRecorder {
     pub fn new() -> Self {
@@ -187,6 +191,8 @@ impl AudioRecorder {
     }
 }
 
+// --- Device discovery ---
+
 pub fn list_input_devices() -> Result<Vec<String>> {
     let host = cpal::default_host();
     let mut devices = vec!["default".to_string()];
@@ -224,6 +230,8 @@ fn resolve_input_device(config: &AudioConfig) -> Result<Device> {
         })
         .with_context(|| format!("input device '{}' was not found", config.device))
 }
+
+// --- Sample conversion ---
 
 fn push_samples<S: Copy>(
     data: &[S],

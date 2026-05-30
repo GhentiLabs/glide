@@ -1,7 +1,7 @@
-// --- macOS permission checking via FFI ---
 use std::ffi::{c_char, c_void};
 
-// Accessibility: ApplicationServices framework
+// --- macOS permission FFI ---
+
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
@@ -23,11 +23,12 @@ unsafe extern "C" {
     fn CFRelease(cf: *const c_void);
 }
 
-// Input Monitoring: CoreGraphics framework (macOS 10.15+)
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
 }
+
+// --- Microphone permission backend ---
 
 #[cfg(target_os = "macos")]
 mod microphone {
@@ -121,6 +122,8 @@ mod microphone {
     }
 }
 
+// --- Permission settings ---
+
 pub const MICROPHONE_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
 pub const ACCESSIBILITY_SETTINGS_URL: &str =
@@ -161,7 +164,9 @@ impl MicrophoneAuthorizationStatus {
     }
 }
 
-/// Check if the app has Accessibility permission (needed for simulated paste via enigo).
+// --- Permission checks ---
+
+/// Check if the app has Accessibility permission (needed for simulated paste via CoreGraphics).
 pub fn has_accessibility_access() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
@@ -254,6 +259,8 @@ fn cpal_microphone_access() -> bool {
         None => false,
     }
 }
+
+// --- UI status ---
 
 /// Permission status for display in the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]

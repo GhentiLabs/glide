@@ -73,9 +73,7 @@ pub struct Style {
     pub llm: Option<ModelSelection>,
 }
 
-// ---------------------------------------------------------------------------
-// Dictionary config
-// ---------------------------------------------------------------------------
+// --- Dictionary config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]

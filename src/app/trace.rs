@@ -11,6 +11,8 @@ use serde::Serialize;
 
 use crate::profile::SpanRecord;
 
+// --- Trace types ---
+
 #[derive(Clone, Default)]
 pub(crate) struct TraceSession {
     inner: Option<Arc<TraceState>>,
@@ -33,6 +35,8 @@ struct TraceEvent<'a> {
     duration_ms: Option<f64>,
     attrs: BTreeMap<String, String>,
 }
+
+// --- Trace session ---
 
 impl TraceSession {
     pub(crate) fn from_env(label: &str) -> Self {
@@ -165,6 +169,8 @@ impl TraceSession {
         }
     }
 }
+
+// --- Trace helpers ---
 
 pub(crate) fn attrs(
     pairs: impl IntoIterator<Item = (&'static str, String)>,

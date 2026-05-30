@@ -11,9 +11,7 @@ use gpui_component::{Icon, IconName};
 use crate::config::HotkeyTrigger;
 use crate::platform::permissions;
 
-// ---------------------------------------------------------------------------
-// OS-dependent hotkey presets
-// ---------------------------------------------------------------------------
+// --- OS-dependent hotkey presets ---
 
 #[cfg(target_os = "macos")]
 fn hotkey_presets() -> [(HotkeyTrigger, &'static str); 4] {
@@ -27,37 +25,6 @@ fn hotkey_presets() -> [(HotkeyTrigger, &'static str); 4] {
         (HotkeyTrigger::Custom(63), "Fn"),
         (HotkeyTrigger::F8, "F8"),
     ]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn status(name: &'static str, granted: bool) -> permissions::PermissionStatus {
-        permissions::PermissionStatus {
-            name,
-            description: "",
-            granted,
-            settings_url: "",
-            icon: "",
-        }
-    }
-
-    #[test]
-    fn test_permission_state_from_statuses() {
-        let statuses = vec![
-            status("Microphone", true),
-            status("Accessibility", false),
-            status("Input Monitoring", true),
-        ];
-
-        let state = PermissionState::from_statuses(&statuses);
-
-        assert!(state.microphone);
-        assert!(!state.accessibility);
-        assert!(state.input_monitoring);
-        assert!(!state.all_granted());
-    }
 }
 
 #[cfg(target_os = "windows")]
@@ -102,9 +69,7 @@ fn hotkey_hint_text() -> &'static str {
      because it\u{2019}s rarely used by other apps."
 }
 
-// ---------------------------------------------------------------------------
-// Step enum
-// ---------------------------------------------------------------------------
+// --- Step enum ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum OnboardingStep {
@@ -150,9 +115,7 @@ impl OnboardingStep {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Permission state
-// ---------------------------------------------------------------------------
+// --- Permission state ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PermissionState {
@@ -183,16 +146,12 @@ fn permission_granted(statuses: &[permissions::PermissionStatus], name: &str) ->
         .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// Onboarding methods on SettingsApp
-// ---------------------------------------------------------------------------
+// --- Onboarding methods on SettingsApp ---
 
 use super::SettingsApp;
 
 impl SettingsApp {
-    // -------------------------------------------------------------------
-    // Navigation
-    // -------------------------------------------------------------------
+    // --- Navigation ---
 
     fn onboarding_can_advance(&self) -> bool {
         match self.onboarding_step {
@@ -203,7 +162,6 @@ impl SettingsApp {
 
     fn onboarding_advance(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) {
         if let Some(next) = self.onboarding_step.next() {
-            // Save hotkey when leaving the hotkey step
             if self.onboarding_step == OnboardingStep::Hotkey
                 && let Some(trigger) = self.onboarding_selected_trigger
             {
@@ -236,9 +194,7 @@ impl SettingsApp {
         cx.notify();
     }
 
-    // -------------------------------------------------------------------
-    // Main overlay render
-    // -------------------------------------------------------------------
+    // --- Main overlay render ---
 
     pub(super) fn render_onboarding_overlay(
         &mut self,
@@ -279,9 +235,7 @@ impl SettingsApp {
             .child(self.render_ob_footer(window, cx))
     }
 
-    // -------------------------------------------------------------------
-    // Step renderers
-    // -------------------------------------------------------------------
+    // --- Step renderers ---
 
     fn render_ob_welcome(
         &self,
@@ -484,7 +438,6 @@ impl SettingsApp {
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
-        // Poll for recorded keycode if recording
         if self.onboarding_recording_custom
             && let Some(code) = self.shared.poll_recorded_keycode()
         {
@@ -543,7 +496,6 @@ impl SettingsApp {
             );
         }
 
-        // Custom key recording
         let is_custom = matches!(
             self.onboarding_selected_trigger,
             Some(HotkeyTrigger::Custom(_))
@@ -611,7 +563,6 @@ impl SettingsApp {
                         this.shared.start_hotkey_recording();
                         this.onboarding_recording_custom = true;
                         cx.notify();
-                        // Poll for recorded keycode
                         cx.spawn(async move |view, cx| {
                             loop {
                                 cx.background_executor()
@@ -730,9 +681,7 @@ impl SettingsApp {
             .child(flow)
     }
 
-    // -------------------------------------------------------------------
-    // Footer with progress dots and navigation
-    // -------------------------------------------------------------------
+    // --- Footer ---
 
     fn render_ob_footer(
         &self,
@@ -743,7 +692,6 @@ impl SettingsApp {
         let is_last = self.onboarding_step == OnboardingStep::HowItWorks;
         let can_continue = self.onboarding_can_advance();
 
-        // Progress dots
         let mut dots = div().flex().gap(px(8.0)).items_center();
         for i in 0..OnboardingStep::ALL.len() {
             let is_current = i == step_idx;
@@ -763,7 +711,6 @@ impl SettingsApp {
 
         let next_label = if is_last { "Get Started" } else { "Continue" };
 
-        // Back button
         let back = if step_idx > 0 {
             Button::new("onboarding-back")
                 .label("Back")
@@ -806,5 +753,36 @@ impl SettingsApp {
                     btn.primary()
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(name: &'static str, granted: bool) -> permissions::PermissionStatus {
+        permissions::PermissionStatus {
+            name,
+            description: "",
+            granted,
+            settings_url: "",
+            icon: "",
+        }
+    }
+
+    #[test]
+    fn test_permission_state_from_statuses() {
+        let statuses = vec![
+            status("Microphone", true),
+            status("Accessibility", false),
+            status("Input Monitoring", true),
+        ];
+
+        let state = PermissionState::from_statuses(&statuses);
+
+        assert!(state.microphone);
+        assert!(!state.accessibility);
+        assert!(state.input_monitoring);
+        assert!(!state.all_granted());
     }
 }
