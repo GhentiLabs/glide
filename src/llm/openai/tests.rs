@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-    benchmark::ProfileCollector,
     config::{Provider, ProvidersConfig, providers::ProviderCredentials},
     llm::{CleanupContext, LlmProvider},
+    profile::ProfileCollector,
 };
 use serde_json::Value;
 use std::{

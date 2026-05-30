@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::config::ProvidersConfig;
+use glide::benchmark_support::{GLIDE_VERSION, ProvidersConfig};
 
 use super::{
     Provider, REPORT_SCHEMA_VERSION,
@@ -230,7 +230,7 @@ impl Hasher for StableHasher {
 
 pub(super) fn environment_metadata() -> EnvironmentMetadata {
     EnvironmentMetadata {
-        glide_version: env!("CARGO_PKG_VERSION").to_string(),
+        glide_version: GLIDE_VERSION.to_string(),
         git_sha: command_stdout("git", &["rev-parse", "--short", "HEAD"]),
         os: os_version(),
     }

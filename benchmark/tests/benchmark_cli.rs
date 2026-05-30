@@ -1,4 +1,4 @@
-use glide::benchmark::{BenchCommand, CompareOptions, Provider, parse_cli_args};
+use glide_benchmark::{BenchCommand, CompareOptions, Provider, parse_cli_args};
 
 #[test]
 fn parses_stt_cli_command() {

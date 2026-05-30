@@ -15,7 +15,7 @@ pub(crate) use process::{helper_failure_message, helper_path};
 pub use types::AppleSpeechInstallProgress;
 
 #[cfg(test)]
-use crate::benchmark::ProfileCollector;
+use crate::profile::ProfileCollector;
 #[cfg(test)]
 use process::decode_helper_response;
 #[cfg(test)]

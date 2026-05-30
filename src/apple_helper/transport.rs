@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::benchmark::ProfileCollector;
+use crate::profile::ProfileCollector;
 
 use super::types::{HelperResponse, PersistentHelperRequest};
 

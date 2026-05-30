@@ -4,10 +4,10 @@ use anyhow::{Context, Result};
 
 use crate::{
     audio::RecordedAudio,
-    benchmark::ProfileCollector,
     config::ReplacementRule,
     llm::{self, CleanupContext},
     paste,
+    profile::ProfileCollector,
     state::{RuntimeStatus, SharedState},
     stt,
     trace::{TraceSession, attrs},

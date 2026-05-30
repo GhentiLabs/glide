@@ -2,8 +2,8 @@ use anyhow::Result;
 
 use crate::{
     audio::AudioFormat,
-    benchmark::ProfileCollector,
     config::{Provider, ProvidersConfig},
+    profile::ProfileCollector,
 };
 
 mod apple;

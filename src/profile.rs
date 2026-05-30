@@ -5,11 +5,16 @@ use std::{
 };
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
-use super::types::SpanRecord;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SpanRecord {
+    pub phase: String,
+    pub duration_ms: f64,
+}
 
 #[derive(Clone, Default)]
-pub(crate) struct ProfileCollector {
+pub struct ProfileCollector {
     inner: Option<Arc<ProfileState>>,
 }
 
@@ -20,21 +25,21 @@ struct ProfileState {
 }
 
 impl ProfileCollector {
-    pub(crate) fn enabled() -> Self {
+    pub fn enabled() -> Self {
         Self {
             inner: Some(Arc::new(ProfileState::default())),
         }
     }
 
-    pub(crate) fn disabled() -> Self {
+    pub fn disabled() -> Self {
         Self { inner: None }
     }
 
-    pub(crate) fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
     }
 
-    pub(crate) fn record(&self, phase: impl Into<String>, duration: Duration) {
+    pub fn record(&self, phase: impl Into<String>, duration: Duration) {
         if let Some(inner) = &self.inner
             && let Ok(mut spans) = inner.spans.lock()
         {
@@ -45,25 +50,22 @@ impl ProfileCollector {
         }
     }
 
-    pub(crate) fn measure<T>(&self, phase: &str, f: impl FnOnce() -> T) -> T {
+    pub fn measure<T>(&self, phase: &str, f: impl FnOnce() -> T) -> T {
         let started = Instant::now();
         let result = f();
         self.record(phase, started.elapsed());
         result
     }
 
-    pub(crate) fn measure_result<T>(
-        &self,
-        phase: &str,
-        f: impl FnOnce() -> Result<T>,
-    ) -> Result<T> {
+    pub fn measure_result<T>(&self, phase: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
         let started = Instant::now();
         let result = f();
         self.record(phase, started.elapsed());
         result
     }
 
-    pub(crate) fn mark(&self, marker: impl Into<String>) {
+    #[allow(dead_code)]
+    pub fn mark(&self, marker: impl Into<String>) {
         if let Some(inner) = &self.inner
             && let Ok(mut markers) = inner.markers.lock()
         {
@@ -71,7 +73,7 @@ impl ProfileCollector {
         }
     }
 
-    pub(crate) fn record_since_marker(&self, marker: &str, phase: impl Into<String>) {
+    pub fn record_since_marker(&self, marker: &str, phase: impl Into<String>) {
         let Some(started) = self.inner.as_ref().and_then(|inner| {
             inner
                 .markers
@@ -84,7 +86,7 @@ impl ProfileCollector {
         self.record(phase, started.elapsed());
     }
 
-    pub(crate) fn spans(&self) -> Vec<SpanRecord> {
+    pub fn spans(&self) -> Vec<SpanRecord> {
         self.inner
             .as_ref()
             .and_then(|inner| inner.spans.lock().ok().map(|spans| spans.clone()))

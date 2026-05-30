@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::{benchmark::ProfileCollector, llm::CleanupContext};
+use crate::{llm::CleanupContext, profile::ProfileCollector};
 
 use super::{
     process::{helper_path, run_helper, write_temp_audio},

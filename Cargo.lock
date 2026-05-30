@@ -2328,6 +2328,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glide-benchmark"
+version = "0.1.0-beta.1"
+dependencies = [
+ "anyhow",
+ "glide",
+ "hound",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

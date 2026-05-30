@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::Provider;
+use super::{Provider, SpanRecord};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BenchCommand {
@@ -124,12 +124,6 @@ pub struct BenchmarkRun {
     pub phases: Vec<SpanRecord>,
     pub output: Option<TextSummary>,
     pub selections: Vec<ProviderModelMetadata>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SpanRecord {
-    pub phase: String,
-    pub duration_ms: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

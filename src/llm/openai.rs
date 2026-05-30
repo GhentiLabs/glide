@@ -3,8 +3,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    benchmark::ProfileCollector,
     config::{Provider, ProvidersConfig},
+    profile::ProfileCollector,
 };
 
 use super::{CleanupContext, build_cleanup_user_prompt};

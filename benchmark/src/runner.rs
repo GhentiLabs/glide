@@ -7,21 +7,19 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::{
-    audio::{AudioFormat, RecordedAudio},
-    config::{GlideConfig, ModelSelection, ReplacementRule},
-    llm::{self, CleanupContext},
-    paste, stt,
+use glide::benchmark_support::{
+    self as glide_core, AudioFormat, CleanupContext, GlideConfig, ModelSelection, ProfileCollector,
+    RecordedAudio, ReplacementRule,
 };
 
 use super::{
-    profile::ProfileCollector,
+    SpanRecord,
     report::{
         build_report, provider_base_url_host, provider_metadata, summarize_text, write_report,
     },
     types::{
         AudioMetadata, BenchmarkReport, BenchmarkRun, FlowBenchOptions, LlmBenchOptions,
-        ProviderModelMetadata, ScenarioMetadata, SpanRecord, SttBenchOptions, TextSummary,
+        ProviderModelMetadata, ScenarioMetadata, SttBenchOptions, TextSummary,
     },
 };
 
@@ -143,7 +141,7 @@ fn run_stt_once(
             Some(config.dictionary.vocabulary.join(", "))
         };
         let provider = collector.measure_result("stt_provider_build", || {
-            stt::build_profiled_provider(
+            glide_core::build_profiled_stt_provider(
                 options.provider,
                 &options.model,
                 &config.providers,
@@ -201,7 +199,7 @@ fn run_llm_once(
     let mut error_phase = None;
     let result = (|| -> Result<TextSummary> {
         let provider = collector.measure_result("llm_provider_build", || {
-            llm::build_profiled_provider(
+            glide_core::build_profiled_llm_provider(
                 options.provider,
                 &options.model,
                 &config.dictation.system_prompt,
@@ -308,7 +306,7 @@ fn run_flow_once(
             Some(config.dictionary.vocabulary.join(", "))
         };
         let stt_provider = match collector.measure_result("flow_stt_provider_build", || {
-            stt::build_profiled_provider(
+            glide_core::build_profiled_stt_provider(
                 resolved.stt.provider,
                 &resolved.stt.model,
                 &config.providers,
@@ -342,7 +340,7 @@ fn run_flow_once(
 
         let cleaned_text = if let Some(llm_selection) = resolved.llm {
             let llm_provider = match collector.measure_result("flow_llm_provider_build", || {
-                llm::build_profiled_provider(
+                glide_core::build_profiled_llm_provider(
                     llm_selection.provider,
                     &llm_selection.model,
                     &resolved.system_prompt,
@@ -378,12 +376,12 @@ fn run_flow_once(
         };
 
         let cleaned_text = collector.measure("flow_postprocess_strip_think_tags", || {
-            llm::strip_think_tags(&cleaned_text)
+            glide_core::strip_think_tags(&cleaned_text)
         });
 
         if options.paste
             && let Err(error) = collector.measure_result("flow_paste", || {
-                paste::paste_text(&cleaned_text, &config.paste)
+                glide_core::paste_text(&cleaned_text, &config.paste)
             })
         {
             error_phase = Some("flow_paste".to_string());

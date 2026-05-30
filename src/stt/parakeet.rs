@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineTransducerModelConfig, Wave};
 
-use crate::{audio::AudioFormat, benchmark::ProfileCollector, local_models};
+use crate::{audio::AudioFormat, local_models, profile::ProfileCollector};
 
 type SharedRecognizer = Arc<Mutex<OfflineRecognizer>>;
 

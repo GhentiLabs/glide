@@ -217,7 +217,7 @@ fn profile_collector_records_only_when_enabled() {
 
 #[test]
 fn loads_recorded_benchmark_audio_fixtures() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let short = load_wav_audio(&root.join("fixtures/benchmark/dictation-short.wav")).unwrap();
     let long = load_wav_audio(&root.join("fixtures/benchmark/dictation-long.wav")).unwrap();
 

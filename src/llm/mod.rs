@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::{
-    benchmark::ProfileCollector,
     config::{Provider, ProvidersConfig},
+    profile::ProfileCollector,
 };
 
 mod apple;

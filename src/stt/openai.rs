@@ -4,8 +4,8 @@ use serde::Deserialize;
 
 use crate::{
     audio::AudioFormat,
-    benchmark::ProfileCollector,
     config::{Provider, ProvidersConfig},
+    profile::ProfileCollector,
 };
 
 pub struct OpenAiSttProvider {

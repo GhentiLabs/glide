@@ -7,10 +7,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::{
-    config::GlideConfig,
-    llm::{self, CleanupContext},
-};
+use glide::benchmark_support::{self as glide_core, CleanupContext, GlideConfig, LlmProvider};
 
 use super::{
     REPORT_SCHEMA_VERSION,
@@ -42,7 +39,7 @@ pub(super) fn run_prompt_eval(options: &PromptEvalOptions) -> Result<(PromptEval
     );
 
     for (candidate_index, candidate) in options.candidates.iter().enumerate() {
-        let mut providers: BTreeMap<String, Box<dyn llm::LlmProvider>> = BTreeMap::new();
+        let mut providers: BTreeMap<String, Box<dyn LlmProvider>> = BTreeMap::new();
         let mut results = Vec::new();
         eprintln!(
             "prompt-eval: candidate {}/{} {}:{}",
@@ -57,7 +54,7 @@ pub(super) fn run_prompt_eval(options: &PromptEvalOptions) -> Result<(PromptEval
                 let style_prompt = prompt_eval_style_prompt(&config, &case.style)?;
                 let provider_key = case.style.to_lowercase();
                 if !providers.contains_key(&provider_key) {
-                    let provider = llm::build_provider(
+                    let provider = glide_core::build_llm_provider(
                         candidate.provider,
                         &candidate.model,
                         style_prompt,
@@ -208,7 +205,7 @@ pub(super) fn prompt_eval_result(
 ) -> PromptEvalResult {
     match output {
         Ok(raw_output) => {
-            let stripped_output = llm::strip_think_tags(&raw_output);
+            let stripped_output = glide_core::strip_think_tags(&raw_output);
             let normalized_output = normalize_prompt_eval_text(&stripped_output);
             let (passed, reason) =
                 score_prompt_eval_output(case, &normalized_output, &stripped_output);

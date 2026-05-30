@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{apple_helper, audio::AudioFormat, benchmark::ProfileCollector};
+use crate::{apple_helper, audio::AudioFormat, profile::ProfileCollector};
 
 pub struct AppleSpeechProvider {
     model_id: String,

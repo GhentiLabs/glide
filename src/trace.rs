@@ -9,7 +9,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::benchmark::SpanRecord;
+use crate::profile::SpanRecord;
 
 #[derive(Clone, Default)]
 pub(crate) struct TraceSession {

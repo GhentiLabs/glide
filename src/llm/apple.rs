@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{apple_helper, benchmark::ProfileCollector};
+use crate::{apple_helper, profile::ProfileCollector};
 
 use super::CleanupContext;
 
