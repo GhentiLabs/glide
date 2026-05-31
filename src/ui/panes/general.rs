@@ -7,6 +7,8 @@ use gpui_component::Sizable;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
 
+use strum::VariantArray as _;
+
 use crate::app::state::AppSnapshot;
 use crate::config::{ColorAccent, HotkeyTrigger, OverlayStyle, ThemePreference};
 
@@ -30,7 +32,7 @@ impl SettingsApp {
         let mut style_cards = div().flex().gap_3().flex_1();
         let is_macos = cfg!(target_os = "macos");
         let has_notch = crate::platform::notch_width().is_some();
-        for style in OverlayStyle::ALL {
+        for style in OverlayStyle::VARIANTS.iter().copied() {
             if style == OverlayStyle::Glow && !is_macos {
                 continue;
             }
@@ -97,7 +99,7 @@ impl SettingsApp {
                         ))
                         .child({
                             let mut pos_cards = div().flex().gap_3().flex_1();
-                            let positions: Vec<_> = crate::config::OverlayPosition::ALL
+                            let positions: Vec<_> = crate::config::OverlayPosition::VARIANTS
                                 .iter()
                                 .filter(|p| {
                                     **p != crate::config::OverlayPosition::Notch || has_notch
@@ -311,7 +313,7 @@ impl SettingsApp {
                     .child(
                         setting_row("Appearance", "Switch between light and dark", cx).child({
                             let mut pills = div().flex().gap_1().flex_shrink_0();
-                            for pref in ThemePreference::ALL {
+                            for pref in ThemePreference::VARIANTS.iter().copied() {
                                 let is_active = pref == current_theme;
                                 pills = pills.child(
                                     Button::new(SharedString::from(format!(
@@ -345,7 +347,7 @@ impl SettingsApp {
                     .child(setting_row("Theme", "Choose your accent color", cx).child({
                         let current_accent = snapshot.config.app.accent;
                         let mut pills = div().flex().gap_1().flex_shrink_0();
-                        for accent in ColorAccent::ALL {
+                        for accent in ColorAccent::VARIANTS.iter().copied() {
                             let is_active = accent == current_accent;
                             pills =
                                 pills.child(

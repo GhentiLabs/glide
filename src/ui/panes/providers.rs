@@ -23,7 +23,7 @@ impl SettingsApp {
     ) -> impl IntoElement {
         let mut container = div().flex().flex_col().gap_2();
 
-        for provider in Provider::SETTINGS_REMOTE {
+        for provider in Provider::REMOTE {
             let inputs = self.provider_inputs_for(provider);
             let is_expanded = self.expanded_provider == Some(provider);
             let logo_path = Some(crate::config::asset_path(provider.logo()));

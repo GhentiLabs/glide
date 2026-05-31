@@ -1,36 +1,38 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage as _;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
+    #[strum(message = "OpenAI")]
     OpenAi,
+    #[strum(message = "Groq")]
     Groq,
+    #[strum(message = "Cerebras")]
     Cerebras,
+    #[strum(message = "Fireworks")]
     Fireworks,
+    #[strum(message = "ElevenLabs")]
     ElevenLabs,
+    #[strum(message = "Apple Intelligence")]
     AppleLocal,
+    #[strum(message = "Parakeet")]
     Parakeet,
 }
 
 impl Provider {
-    pub const ALL: [Self; 7] = [
-        Self::OpenAi,
-        Self::Groq,
-        Self::Cerebras,
-        Self::Fireworks,
-        Self::ElevenLabs,
-        Self::AppleLocal,
-        Self::Parakeet,
-    ];
     pub const REMOTE: [Self; 5] = [
-        Self::OpenAi,
-        Self::Groq,
-        Self::Cerebras,
-        Self::Fireworks,
-        Self::ElevenLabs,
-    ];
-    pub const SETTINGS_REMOTE: [Self; 5] = [
         Self::OpenAi,
         Self::Groq,
         Self::Fireworks,
@@ -38,6 +40,8 @@ impl Provider {
         Self::Cerebras,
     ];
 
+    // Considered strum, but didn't as this is used for keyring storage and
+    // should be explicit & stable.
     pub fn key_id(self) -> Option<&'static str> {
         match self {
             Self::OpenAi => Some("openai"),
@@ -54,15 +58,7 @@ impl Provider {
     }
 
     pub fn label(self) -> &'static str {
-        match self {
-            Self::OpenAi => "OpenAI",
-            Self::Groq => "Groq",
-            Self::Cerebras => "Cerebras",
-            Self::Fireworks => "Fireworks",
-            Self::ElevenLabs => "ElevenLabs",
-            Self::AppleLocal => "Apple Intelligence",
-            Self::Parakeet => "Parakeet",
-        }
+        self.get_message().expect("provider label")
     }
 
     pub fn logo(self) -> &'static str {
@@ -241,6 +237,7 @@ impl ProviderCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strum::VariantArray as _;
 
     #[test]
     fn provider_metadata_is_stable() {
@@ -262,7 +259,7 @@ mod tests {
             (Provider::Parakeet, "Parakeet", ""),
         ];
 
-        assert_eq!(Provider::ALL.len(), cases.len());
+        assert_eq!(Provider::VARIANTS.len(), cases.len());
         for (provider, label, base_url) in cases {
             assert_eq!(provider.label(), label);
             assert_eq!(provider.default_base_url(), base_url);
@@ -272,7 +269,7 @@ mod tests {
                 .into_iter()
                 .filter_map(Provider::key_id)
                 .collect::<Vec<_>>(),
-            ["openai", "groq", "cerebras", "fireworks", "elevenlabs"]
+            ["openai", "groq", "fireworks", "elevenlabs", "cerebras"]
         );
     }
 

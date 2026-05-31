@@ -119,7 +119,7 @@ impl SettingsApp {
         let replacement_replace_input = cx.new(|cx| InputState::new(window, cx));
 
         let mut subs = vec![cx.subscribe_in(&default_prompt, window, Self::on_input_change)];
-        let provider_inputs = Provider::SETTINGS_REMOTE
+        let provider_inputs = Provider::REMOTE
             .into_iter()
             .map(|provider| {
                 let (inputs, provider_subs) = Self::create_provider_inputs(

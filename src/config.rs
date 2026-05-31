@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use strum::EnumMessage as _;
 
 const CONFIG_APP_NAME: &str = "glide";
 const CONFIG_NAME: &str = "config";
@@ -151,23 +152,30 @@ impl Default for AppConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemePreference {
+    #[strum(message = "System")]
     System,
+    #[strum(message = "Light")]
     Light,
+    #[strum(message = "Dark")]
     Dark,
 }
 
 impl ThemePreference {
-    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
-
     pub fn label(self) -> &'static str {
-        match self {
-            Self::System => "System",
-            Self::Light => "Light",
-            Self::Dark => "Dark",
-        }
+        self.get_message().expect("theme label")
     }
 }
 
@@ -178,26 +186,34 @@ pub enum MenuBarIcon {
     Monochrome,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Default,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ColorAccent {
+    #[strum(message = "Purple")]
     Purple,
+    #[strum(message = "Blue")]
     Blue,
+    #[strum(message = "Orange")]
     Orange,
     #[default]
+    #[strum(message = "Slate")]
     Slate,
 }
 
 impl ColorAccent {
-    pub const ALL: [Self; 4] = [Self::Purple, Self::Blue, Self::Orange, Self::Slate];
-
     pub fn label(self) -> &'static str {
-        match self {
-            Self::Purple => "Purple",
-            Self::Blue => "Blue",
-            Self::Orange => "Orange",
-            Self::Slate => "Slate",
-        }
+        self.get_message().expect("accent label")
     }
 
     /// Primary accent color in HSLA for the GPUI theme system.
@@ -431,41 +447,55 @@ impl Default for AudioConfig {
 
 // --- Overlay config ---
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OverlayStyle {
+    #[strum(message = "Classic")]
     Classic,
+    #[strum(message = "Glow")]
     Glow,
+    #[strum(message = "None")]
     None,
 }
 
 impl OverlayStyle {
-    pub const ALL: [Self; 3] = [Self::Classic, Self::Glow, Self::None];
-
     pub fn label(self) -> &'static str {
-        match self {
-            Self::Classic => "Classic",
-            Self::Glow => "Glow",
-            Self::None => "None",
-        }
+        self.get_message().expect("overlay style label")
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OverlayPosition {
+    #[strum(message = "Notch")]
     Notch,
+    #[strum(message = "Floating")]
     Floating,
 }
 
 impl OverlayPosition {
-    pub const ALL: [Self; 2] = [Self::Notch, Self::Floating];
-
     pub fn label(self) -> &'static str {
-        match self {
-            Self::Notch => "Notch",
-            Self::Floating => "Floating",
-        }
+        self.get_message().expect("overlay position label")
     }
 }
 

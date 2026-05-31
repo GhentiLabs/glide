@@ -1,5 +1,7 @@
 use std::sync::{Mutex, OnceLock};
 
+use strum::VariantArray as _;
+
 use crate::{
     config::Provider,
     engines::local_models::{self, LocalModelInstallState},
@@ -53,5 +55,5 @@ pub fn provider_verified(provider: Provider) -> bool {
 }
 
 pub fn any_provider_verified() -> bool {
-    Provider::ALL.into_iter().any(provider_verified)
+    Provider::VARIANTS.iter().copied().any(provider_verified)
 }

@@ -7,6 +7,7 @@ use gpui_component::Disableable;
 use gpui_component::Sizable;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
+use strum::VariantArray as _;
 
 use crate::config::HotkeyTrigger;
 use crate::platform::permissions;
@@ -71,7 +72,7 @@ fn hotkey_hint_text() -> &'static str {
 
 // --- Step enum ---
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::VariantArray)]
 pub(super) enum OnboardingStep {
     Welcome,
     Permissions,
@@ -80,38 +81,22 @@ pub(super) enum OnboardingStep {
 }
 
 impl OnboardingStep {
-    const ALL: [Self; 4] = [
-        Self::Welcome,
-        Self::Permissions,
-        Self::Hotkey,
-        Self::HowItWorks,
-    ];
-
     fn index(self) -> usize {
-        match self {
-            Self::Welcome => 0,
-            Self::Permissions => 1,
-            Self::Hotkey => 2,
-            Self::HowItWorks => 3,
-        }
+        Self::VARIANTS
+            .iter()
+            .position(|step| *step == self)
+            .expect("onboarding step")
     }
 
     fn next(self) -> Option<Self> {
-        match self {
-            Self::Welcome => Some(Self::Permissions),
-            Self::Permissions => Some(Self::Hotkey),
-            Self::Hotkey => Some(Self::HowItWorks),
-            Self::HowItWorks => None,
-        }
+        Self::VARIANTS.get(self.index() + 1).copied()
     }
 
     fn prev(self) -> Option<Self> {
-        match self {
-            Self::Welcome => None,
-            Self::Permissions => Some(Self::Welcome),
-            Self::Hotkey => Some(Self::Permissions),
-            Self::HowItWorks => Some(Self::Hotkey),
-        }
+        self.index()
+            .checked_sub(1)
+            .and_then(|index| Self::VARIANTS.get(index))
+            .copied()
     }
 }
 
@@ -693,7 +678,7 @@ impl SettingsApp {
         let can_continue = self.onboarding_can_advance();
 
         let mut dots = div().flex().gap(px(8.0)).items_center();
-        for i in 0..OnboardingStep::ALL.len() {
+        for i in 0..OnboardingStep::VARIANTS.len() {
             let is_current = i == step_idx;
             let is_past = i < step_idx;
             dots = dots.child(
