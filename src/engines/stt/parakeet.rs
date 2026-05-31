@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineTransducerModelConfig, Wave};
 
-use crate::{audio::AudioFormat, engines::local_models, profile::ProfileCollector};
+use crate::{audio::AudioFormat, engines::model_assets, profile::ProfileCollector};
 
 type SharedRecognizer = Arc<Mutex<OfflineRecognizer>>;
 
@@ -29,10 +29,6 @@ impl ParakeetSttProvider {
             profile,
         })
     }
-}
-
-pub(crate) fn prewarm_model(model_id: &str) -> Result<()> {
-    recognizer_for_model(model_id, &ProfileCollector::disabled()).map(|_| ())
 }
 
 #[async_trait::async_trait]
@@ -57,6 +53,10 @@ impl super::SttProvider for ParakeetSttProvider {
     }
 }
 
+pub(crate) fn prewarm_model(model_id: &str) -> Result<()> {
+    recognizer_for_model(model_id, &ProfileCollector::disabled()).map(|_| ())
+}
+
 fn recognizer_for_model(model_id: &str, profile: &ProfileCollector) -> Result<SharedRecognizer> {
     let cache = RECOGNIZERS.get_or_init(|| Mutex::new(HashMap::new()));
     let lock_started = std::time::Instant::now();
@@ -75,8 +75,8 @@ fn recognizer_for_model(model_id: &str, profile: &ProfileCollector) -> Result<Sh
 }
 
 fn create_recognizer(model_id: &str) -> Result<OfflineRecognizer> {
-    let model_dir = local_models::parakeet_model_dir(model_id)?;
-    local_models::validate_parakeet_model_dir(&model_dir)?;
+    let model_dir = model_assets::parakeet_model_dir(model_id)?;
+    model_assets::validate_parakeet_model_dir(&model_dir)?;
 
     let mut config = OfflineRecognizerConfig::default();
     config.model_config.transducer = OfflineTransducerModelConfig {

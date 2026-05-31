@@ -1,5 +1,5 @@
 use super::*;
-use crate::engines::local_models::APPLE_FOUNDATION_MODEL_ID;
+use crate::engines::model_assets::APPLE_FOUNDATION_MODEL_ID;
 use std::sync::{Mutex, MutexGuard};
 
 static PROVIDER_LOCK: Mutex<()> = Mutex::new(());
@@ -27,10 +27,10 @@ fn reset_providers_verified() {
     let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 5]));
     let mut locked = cache.lock().unwrap();
     *locked = [false; 5];
-    for model in local_models::PARAKEET_MODELS {
-        local_models::set_parakeet_install_state_for_test(
+    for model in model_assets::PARAKEET_MODELS {
+        model_assets::set_parakeet_install_state_for_test(
             model.id,
-            LocalModelInstallState::NotInstalled,
+            ParakeetInstallState::NotInstalled,
         );
     }
 }
@@ -40,69 +40,77 @@ fn assert_selection(selection: &ModelSelection, provider: Provider, model: &str)
     assert_eq!(selection.model, model);
 }
 
-#[test]
-fn remote_provider_verification_state_is_tracked_per_provider() {
-    for provider in Provider::REMOTE {
-        let _state = with_verified_providers(&[provider]);
-        assert!(
-            provider_verified(provider),
-            "{provider:?} should be verified"
-        );
+mod verification {
+    use super::*;
+
+    #[test]
+    fn remote_provider_state_is_tracked_per_provider() {
+        for provider in Provider::REMOTE {
+            let _state = with_verified_providers(&[provider]);
+            assert!(
+                provider_verified(provider),
+                "{provider:?} should be verified"
+            );
+        }
     }
 }
 
-#[test]
-fn elevenlabs_model_discovery_keeps_known_scribe_models() {
-    let cases = [
-        (
-            vec![ElevenLabsModelsResponseEntry {
-                model_id: "eleven_multilingual_v2".to_string(),
-                name: Some("Eleven Multilingual v2".to_string()),
-            }],
-            ("Scribe v2", "Scribe v1"),
-        ),
-        (
-            vec![ElevenLabsModelsResponseEntry {
-                model_id: "scribe_v2".to_string(),
-                name: Some("Returned Scribe v2".to_string()),
-            }],
-            ("Returned Scribe v2", "Scribe v1"),
-        ),
-    ];
+mod remote_models {
+    use super::*;
 
-    for (entries, (expected_v2, expected_v1)) in cases {
-        let mut models = Vec::new();
-        append_elevenlabs_scribe_models(&mut models, entries);
+    #[test]
+    fn elevenlabs_model_discovery_keeps_known_scribe_models() {
+        let cases = [
+            (
+                vec![ElevenLabsModelsResponseEntry {
+                    model_id: "eleven_multilingual_v2".to_string(),
+                    name: Some("Eleven Multilingual v2".to_string()),
+                }],
+                ("Scribe v2", "Scribe v1"),
+            ),
+            (
+                vec![ElevenLabsModelsResponseEntry {
+                    model_id: "scribe_v2".to_string(),
+                    name: Some("Returned Scribe v2".to_string()),
+                }],
+                ("Returned Scribe v2", "Scribe v1"),
+            ),
+        ];
 
-        assert_eq!(models.len(), 2);
-        assert!(models.iter().any(|model| {
-            model.provider == "ElevenLabs"
-                && model.id == "scribe_v2"
-                && model.display_name == expected_v2
-        }));
-        assert!(models.iter().any(|model| {
-            model.provider == "ElevenLabs"
-                && model.id == "scribe_v1"
-                && model.display_name == expected_v1
-        }));
-    }
-}
+        for (entries, (expected_v2, expected_v1)) in cases {
+            let mut models = Vec::new();
+            append_elevenlabs_scribe_models(&mut models, entries);
 
-#[test]
-fn openai_generation_models_are_excluded_from_llm_picker() {
-    for id in [
-        "sora-2",
-        "sora-2-pro",
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-audio",
-        "gpt-audio-mini",
-    ] {
-        assert!(excluded_remote_llm_model(Provider::OpenAi, id), "{id}");
+            assert_eq!(models.len(), 2);
+            assert!(models.iter().any(|model| {
+                model.provider == "ElevenLabs"
+                    && model.id == "scribe_v2"
+                    && model.display_name == expected_v2
+            }));
+            assert!(models.iter().any(|model| {
+                model.provider == "ElevenLabs"
+                    && model.id == "scribe_v1"
+                    && model.display_name == expected_v1
+            }));
+        }
     }
 
-    assert!(!excluded_remote_llm_model(Provider::OpenAi, "gpt-5.4-nano"));
-    assert!(!excluded_remote_llm_model(Provider::Groq, "sora-2"));
+    #[test]
+    fn openai_generation_models_are_excluded_from_llm_picker() {
+        for id in [
+            "sora-2",
+            "sora-2-pro",
+            "gpt-image-1",
+            "gpt-image-1-mini",
+            "gpt-audio",
+            "gpt-audio-mini",
+        ] {
+            assert!(excluded_remote_llm_model(Provider::OpenAi, id), "{id}");
+        }
+
+        assert!(!excluded_remote_llm_model(Provider::OpenAi, "gpt-5.4-nano"));
+        assert!(!excluded_remote_llm_model(Provider::Groq, "sora-2"));
+    }
 }
 
 mod smart_defaults {
@@ -177,7 +185,7 @@ mod smart_defaults {
     }
 
     #[test]
-    fn apply_smart_defaults_repairs_unavailable_defaults_without_enabling_llm() {
+    fn apply_smart_defaults_repairs_unavailable_defaults_after_initial_run() {
         let cases = [
             (&[][..], Provider::AppleLocal, "speechanalyzer-en_US"),
             (
@@ -190,6 +198,7 @@ mod smart_defaults {
         for (verified, expected_provider, expected_model) in cases {
             let _state = with_verified_providers(verified);
             let mut config = GlideConfig::default();
+            config.dictation.smart_defaults_applied = true;
 
             apply_smart_defaults(&mut config);
 
@@ -202,6 +211,7 @@ mod smart_defaults {
     fn apply_smart_defaults_keeps_verified_openai_stt_default() {
         let _state = with_verified_providers(&[Provider::OpenAi]);
         let mut config = GlideConfig::default();
+        config.dictation.smart_defaults_applied = true;
 
         apply_smart_defaults(&mut config);
 
@@ -210,11 +220,11 @@ mod smart_defaults {
     }
 
     #[test]
-    fn apply_smart_defaults_initial_enables_llm_once() {
+    fn apply_smart_defaults_enables_llm_once() {
         let _state = with_verified_providers(&[Provider::Groq]);
         let mut config = GlideConfig::default();
 
-        apply_smart_defaults_initial(&mut config);
+        apply_smart_defaults(&mut config);
 
         assert_selection(
             &config.dictation.stt,
@@ -229,16 +239,16 @@ mod smart_defaults {
         assert!(config.dictation.smart_defaults_applied);
 
         config.dictation.llm = None;
-        apply_smart_defaults_initial(&mut config);
+        apply_smart_defaults(&mut config);
         assert!(config.dictation.llm.is_none());
     }
 
     #[test]
-    fn apply_smart_defaults_initial_uses_verified_openai_llm() {
+    fn apply_smart_defaults_uses_verified_openai_llm_on_first_run() {
         let _state = with_verified_providers(&[Provider::OpenAi]);
         let mut config = GlideConfig::default();
 
-        apply_smart_defaults_initial(&mut config);
+        apply_smart_defaults(&mut config);
 
         assert_selection(&config.dictation.stt, Provider::OpenAi, "whisper-1");
         assert_selection(
@@ -290,12 +300,12 @@ mod smart_defaults {
     }
 
     #[test]
-    fn removed_apple_foundation_selection_falls_back_to_default() {
+    fn unavailable_apple_foundation_selection_falls_back_to_default() {
         let _state = with_verified_providers(&[]);
         let mut config = GlideConfig::default();
         config.dictation.llm = Some(ModelSelection {
             provider: Provider::AppleLocal,
-            model: "apple-foundation-rewrite".to_string(),
+            model: "unknown-model".to_string(),
         });
 
         apply_smart_defaults(&mut config);
@@ -318,15 +328,17 @@ mod model_lists {
                 &[][..],
                 vec!["Apple Intelligence"],
                 vec!["speechanalyzer-en_US"],
+                vec!["OpenAI", "Groq", "Fireworks", "ElevenLabs"],
             ),
             (
                 &[Provider::Groq][..],
                 vec!["Apple Intelligence", "Groq"],
                 vec!["speechanalyzer-en_US", "whisper-large-v3-turbo"],
+                vec!["OpenAI", "Fireworks", "ElevenLabs"],
             ),
         ];
 
-        for (verified, expected_providers, expected_ids) in cases {
+        for (verified, expected_providers, expected_ids, absent_providers) in cases {
             let _state = with_verified_providers(verified);
             let models = fallback_stt_models();
 
@@ -339,11 +351,10 @@ mod model_lists {
             for id in expected_ids {
                 assert!(models.iter().any(|model| model.id == id), "missing id {id}");
             }
-            if verified.is_empty() {
+            for provider in absent_providers {
                 assert!(
-                    models
-                        .iter()
-                        .all(|model| model.provider == "Apple Intelligence")
+                    models.iter().all(|model| model.provider != provider),
+                    "unexpected provider {provider}"
                 );
             }
         }
@@ -351,18 +362,28 @@ mod model_lists {
 
     #[test]
     fn fallback_llm_models_filter_by_verified_providers() {
-        let _state = with_verified_providers(&[Provider::OpenAi]);
-        let models = fallback_llm_models();
-
-        assert!(models.iter().any(|model| model.provider == "OpenAI"));
+        let _state = with_verified_providers(&[]);
+        let local_only = fallback_llm_models();
         assert!(
-            models
+            local_only
+                .iter()
+                .any(|model| model.id == APPLE_FOUNDATION_MODEL_ID)
+        );
+        assert!(local_only.iter().all(|model| model.provider != "OpenAI"));
+
+        drop(_state);
+        let _state = with_verified_providers(&[Provider::OpenAi]);
+        let with_openai = fallback_llm_models();
+
+        assert!(with_openai.iter().any(|model| model.provider == "OpenAI"));
+        assert!(
+            with_openai
                 .iter()
                 .any(|model| model.provider == "Apple Intelligence")
         );
-        assert!(models.iter().any(|model| model.id == "gpt-5.4-nano"));
+        assert!(with_openai.iter().any(|model| model.id == "gpt-5.4-nano"));
         assert!(
-            models
+            with_openai
                 .iter()
                 .any(|model| model.id == APPLE_FOUNDATION_MODEL_ID)
         );
@@ -378,15 +399,6 @@ mod model_lists {
                 .iter()
                 .any(|model| model.id == APPLE_FOUNDATION_MODEL_ID)
         );
-        assert!(
-            !models
-                .iter()
-                .any(|model| model.id == "apple-foundation-rewrite")
-        );
-        assert!(
-            !models
-                .iter()
-                .any(|model| model.id == "apple-foundation-summary")
-        );
+        assert!(!models.iter().any(|model| model.id == "unknown-model"));
     }
 }

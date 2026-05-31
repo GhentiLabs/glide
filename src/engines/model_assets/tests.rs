@@ -52,12 +52,11 @@ fn extracts_archive_without_top_level_directory() {
 #[test]
 fn cancel_marks_active_download_as_cancelling() {
     let id = PARAKEET_MODELS[0].id;
-    clear_download_state(id);
-    clear_download_cancellation(id);
+    reset_parakeet_download_for_test(id);
 
-    set_download_state(
+    set_parakeet_install_state_for_test(
         id,
-        LocalModelInstallState::Downloading {
+        ParakeetInstallState::Downloading {
             downloaded_bytes: 1024,
             total_bytes: Some(2048),
         },
@@ -66,16 +65,14 @@ fn cancel_marks_active_download_as_cancelling() {
     cancel_parakeet_download(id).unwrap();
 
     assert_eq!(
-        download_state(id),
-        Some(LocalModelInstallState::Cancelling {
+        parakeet_download_state_for_test(id),
+        Some(ParakeetInstallState::Cancelling {
             downloaded_bytes: 1024,
             total_bytes: Some(2048),
         })
     );
-    assert!(is_download_cancelled(id));
 
-    clear_download_state(id);
-    clear_download_cancellation(id);
+    reset_parakeet_download_for_test(id);
 }
 
 #[test]
@@ -83,16 +80,7 @@ fn apple_speech_model_ids_round_trip_locale() {
     let id = apple_speech_model_id("en_US");
     assert_eq!(id, "speechanalyzer-en_US");
     assert_eq!(apple_speech_locale_id(&id), Some("en_US"));
-    assert!(apple_speech_locale_id(APPLE_SPEECH_MODEL_ID).is_none());
-    assert!(is_legacy_apple_speech_model(APPLE_SPEECH_MODEL_ID));
-}
-
-#[test]
-fn legacy_apple_speech_model_resolves_to_first_installed_locale() {
-    assert_eq!(
-        resolve_apple_speech_model_id(APPLE_SPEECH_MODEL_ID),
-        Some("speechanalyzer-en_US".to_string())
-    );
+    assert!(apple_speech_locale_id("speechanalyzer-").is_none());
 }
 
 #[test]
@@ -119,7 +107,7 @@ fn apple_speech_unavailable_reason_is_cleared_by_refresh() {
         Some("permission denied".to_string())
     );
 
-    refresh_apple_local_models();
+    refresh_apple_model_assets();
 
     assert_eq!(apple_speech_models_unavailable_reason(), None);
 }
@@ -138,19 +126,15 @@ fn apple_foundation_models_report_default_model_only() {
         resolve_apple_foundation_model_id(APPLE_FOUNDATION_MODEL_ID),
         Some(APPLE_FOUNDATION_MODEL_ID.to_string())
     );
-    assert_eq!(
-        resolve_apple_foundation_model_id("apple-foundation-rewrite"),
-        None
-    );
+    assert_eq!(resolve_apple_foundation_model_id("unknown-model"), None);
 }
 
 #[test]
 fn cancel_marks_active_apple_speech_download_as_cancelling() {
     let id = "speechanalyzer-fr_FR";
-    clear_apple_speech_download_state(id);
-    clear_apple_speech_download_cancellation(id);
+    reset_apple_speech_download_for_test(id);
 
-    set_apple_speech_download_state(
+    set_apple_speech_download_state_for_test(
         id,
         AppleSpeechInstallState::Downloading {
             progress: Some(0.5),
@@ -160,13 +144,11 @@ fn cancel_marks_active_apple_speech_download_as_cancelling() {
     cancel_apple_speech_model_download(id).unwrap();
 
     assert_eq!(
-        apple_speech_download_state(id),
+        apple_speech_download_state_for_test(id),
         Some(AppleSpeechInstallState::Cancelling)
     );
-    assert!(is_apple_speech_download_cancelled(id));
 
-    clear_apple_speech_download_state(id);
-    clear_apple_speech_download_cancellation(id);
+    reset_apple_speech_download_for_test(id);
 }
 
 #[test]
@@ -179,15 +161,13 @@ fn attempts_real_apple_speech_download_then_cancel() {
         "test model id must use speechanalyzer-<locale>"
     );
 
-    clear_apple_speech_download_state(&id);
-    clear_apple_speech_download_cancellation(&id);
-    clear_apple_speech_download_child(&id);
+    reset_apple_speech_download_for_test(&id);
 
     start_apple_speech_model_download(&id).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(750));
     cancel_apple_speech_model_download(&id).unwrap();
 
-    let state = apple_speech_download_state(&id);
+    let state = apple_speech_download_state_for_test(&id);
     assert!(
         matches!(state, Some(AppleSpeechInstallState::Cancelling)) || state.is_none(),
         "expected cancellation to be requested or the OS-managed install to finish quickly; got {state:?}"
@@ -202,15 +182,13 @@ fn attempts_real_apple_speech_download_then_cancel() {
 
     assert!(
         !matches!(
-            apple_speech_download_state(&id),
+            apple_speech_download_state_for_test(&id),
             Some(AppleSpeechInstallState::Downloading { .. })
         ),
         "Apple Speech download remained active after best-effort cancellation"
     );
 
-    clear_apple_speech_download_state(&id);
-    clear_apple_speech_download_cancellation(&id);
-    clear_apple_speech_download_child(&id);
+    reset_apple_speech_download_for_test(&id);
 }
 
 fn make_test_archive(files: &[(&str, &str)]) -> Vec<u8> {

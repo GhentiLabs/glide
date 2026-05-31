@@ -1,9 +1,19 @@
 use std::{env, fs, path::Path, path::PathBuf, process::Command};
 
 const DEFAULT_APPLE_TEAM_ID: &str = "3C99V29U26";
+const APPLE_HELPER_SOURCES: &[&str] = &[
+    "macos/GlideAppleHelper/Main.swift",
+    "macos/GlideAppleHelper/Types.swift",
+    "macos/GlideAppleHelper/Serve.swift",
+    "macos/GlideAppleHelper/Speech.swift",
+    "macos/GlideAppleHelper/FoundationModels.swift",
+    "macos/GlideAppleHelper/Support.swift",
+];
 
 fn main() {
-    println!("cargo:rerun-if-changed=macos/GlideAppleHelper.swift");
+    for source in APPLE_HELPER_SOURCES {
+        println!("cargo:rerun-if-changed={source}");
+    }
     println!("cargo:rerun-if-env-changed=APPLE_CODESIGN_IDENTITY");
     println!("cargo:rerun-if-env-changed=GLIDE_APPLE_CODESIGN_IDENTITY");
     println!("cargo:rerun-if-env-changed=APPLE_TEAM_ID");
@@ -16,7 +26,10 @@ fn main() {
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let source = manifest_dir.join("macos").join("GlideAppleHelper.swift");
+    let sources = APPLE_HELPER_SOURCES
+        .iter()
+        .map(|source| manifest_dir.join(source))
+        .collect::<Vec<_>>();
     let helper = out_dir.join("GlideAppleHelper");
     let helper_info = out_dir.join("GlideAppleHelper-Info.plist");
     let module_cache = out_dir.join("SwiftModuleCache");
@@ -45,10 +58,13 @@ fn main() {
     )
     .expect("failed to write GlideAppleHelper Info.plist");
 
-    let status = Command::new("xcrun")
+    let mut command = Command::new("xcrun");
+    command.arg("swiftc");
+    for source in &sources {
+        command.arg(source);
+    }
+    let status = command
         .args([
-            "swiftc",
-            source.to_str().unwrap(),
             "-parse-as-library",
             "-O",
             "-module-cache-path",

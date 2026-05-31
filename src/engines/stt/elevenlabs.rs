@@ -33,6 +33,22 @@ impl ElevenLabsSttProvider {
             profile,
         })
     }
+
+    fn request_form(&self, audio: &[u8], format: AudioFormat) -> Result<multipart::Form> {
+        let mime = match format {
+            AudioFormat::Wav => "audio/wav",
+        };
+
+        let file_part = multipart::Part::bytes(audio.to_vec())
+            .file_name("glide.wav")
+            .mime_str(mime)
+            .context("failed to create audio upload body")?;
+
+        Ok(multipart::Form::new()
+            .text("model_id", self.model.clone())
+            .text("file_format", "other")
+            .part("file", file_part))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,19 +60,9 @@ struct ElevenLabsTranscriptionResponse {
 impl super::SttProvider for ElevenLabsSttProvider {
     async fn transcribe(&self, audio: &[u8], format: AudioFormat) -> Result<String> {
         let total_started = std::time::Instant::now();
-        let mime = match format {
-            AudioFormat::Wav => "audio/wav",
-        };
 
         let request_started = std::time::Instant::now();
-        let file_part = multipart::Part::bytes(audio.to_vec())
-            .file_name("glide.wav")
-            .mime_str(mime)
-            .context("failed to create audio upload body")?;
-        let form = multipart::Form::new()
-            .text("model_id", self.model.clone())
-            .text("file_format", "other")
-            .part("file", file_part);
+        let form = self.request_form(audio, format)?;
         self.profile
             .record("remote_stt_request_body_build", request_started.elapsed());
 

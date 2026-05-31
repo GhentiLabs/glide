@@ -1,6 +1,8 @@
 use anyhow::Result;
 
-use crate::{engines::apple_helper, profile::ProfileCollector};
+use crate::{engines::apple_bridge, profile::ProfileCollector};
+
+use super::build_cleanup_user_prompt;
 
 pub struct AppleFoundationLlmProvider {
     model_id: String,
@@ -21,12 +23,12 @@ impl AppleFoundationLlmProvider {
 #[async_trait::async_trait]
 impl super::LlmProvider for AppleFoundationLlmProvider {
     async fn clean(&self, raw_text: &str) -> Result<String> {
-        let raw_text = raw_text.trim().to_string();
+        let user_prompt = build_cleanup_user_prompt(raw_text);
         let model_id = self.model_id.clone();
         let system_prompt = self.system_prompt.clone();
         let profile = self.profile.clone();
         tokio::task::spawn_blocking(move || {
-            apple_helper::cleanup_profiled(&model_id, &raw_text, &system_prompt, profile)
+            apple_bridge::cleanup_profiled(&model_id, &system_prompt, &user_prompt, profile)
         })
         .await?
     }

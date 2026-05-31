@@ -21,8 +21,6 @@ pub struct AppleSpeechModel {
     pub locale_id: String,
     pub status: String,
     #[serde(default)]
-    pub installed: bool,
-    #[serde(default)]
     pub reserved: bool,
 }
 
@@ -88,7 +86,6 @@ pub(super) struct HelperTiming {
 pub(super) struct TranscribeRequest {
     pub(super) audio_path: String,
     pub(super) model_id: String,
-    pub(super) vocabulary: Vec<String>,
     pub(super) profile: bool,
 }
 
@@ -102,8 +99,8 @@ pub(super) struct SpeechModelRequest<'a> {
 #[serde(rename_all = "camelCase")]
 pub(super) struct CleanupRequest<'a> {
     pub(super) model_id: &'a str,
-    pub(super) raw_text: &'a str,
     pub(super) system_prompt: &'a str,
+    pub(super) user_prompt: &'a str,
     pub(super) profile: bool,
 }
 

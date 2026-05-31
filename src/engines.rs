@@ -18,18 +18,21 @@
 //!
 //! **Model infrastructure** — not pipeline stages, but support the engines:
 //!
-//! - [`local_models`] — lifecycle of *on-device* model files (download,
+//! - [`model_assets`] — lifecycle of *on-device* model files (download,
 //!   install, validate, status) for Apple Speech and Parakeet. "Do we have the
 //!   files, are they ready?"
+//! - [`prewarm`] — opportunistic runtime warmup for the currently relevant
+//!   providers
 //! - [`model_catalog`] — discovery of *remote* models + smart defaults
-//! - [`apple_helper`] — the IPC subprocess used to reach Apple's on-device
+//! - [`apple_bridge`] — the IPC subprocess used to reach Apple's on-device
 //!   Speech and Foundation models
 //!
 //! [`pipeline`]: crate::pipeline
 //! [`Provider`]: crate::config::Provider
 
-pub mod apple_helper;
+pub mod apple_bridge;
 pub mod llm;
-pub mod local_models;
+pub mod model_assets;
 pub mod model_catalog;
+pub(crate) mod prewarm;
 pub mod stt;

@@ -123,16 +123,16 @@ impl SettingsApp {
     fn render_apple_local_provider_card(&self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let provider = Provider::AppleLocal;
         let is_expanded = self.expanded_provider == Some(provider);
-        let caps = crate::engines::apple_helper::cached_capabilities();
-        let speech_statuses = crate::engines::local_models::apple_speech_models_status();
-        let foundation_statuses = crate::engines::local_models::apple_foundation_models_status();
+        let caps = crate::engines::apple_bridge::cached_capabilities();
+        let speech_statuses = crate::engines::model_assets::apple_speech_models_status();
+        let foundation_statuses = crate::engines::model_assets::apple_foundation_models_status();
         let active_count = speech_statuses
             .iter()
             .filter(|status| {
                 matches!(
                     status.state,
-                    crate::engines::local_models::AppleSpeechInstallState::Downloading { .. }
-                        | crate::engines::local_models::AppleSpeechInstallState::Cancelling
+                    crate::engines::model_assets::AppleSpeechInstallState::Downloading { .. }
+                        | crate::engines::model_assets::AppleSpeechInstallState::Cancelling
                 )
             })
             .count();
@@ -196,7 +196,7 @@ impl SettingsApp {
             })
             .on_click(cx.listener(move |this, _, _window, cx| {
                 if this.expanded_provider != Some(provider) {
-                    crate::engines::local_models::refresh_apple_local_models();
+                    crate::engines::model_assets::refresh_apple_model_assets();
                 }
                 this.expanded_provider = if this.expanded_provider == Some(provider) {
                     None
@@ -209,7 +209,7 @@ impl SettingsApp {
         let body = is_expanded.then(|| {
             let add_popover_statuses = speech_statuses.clone();
             let speech_unavailable_reason =
-                crate::engines::local_models::apple_speech_models_unavailable_reason();
+                crate::engines::model_assets::apple_speech_models_unavailable_reason();
             let add_search = self.apple_speech_search.clone();
             let settings_entity = cx.weak_entity();
             let popover_entity = settings_entity.clone();
@@ -391,13 +391,13 @@ impl SettingsApp {
     fn render_parakeet_provider_card(&self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let provider = Provider::Parakeet;
         let is_expanded = self.expanded_provider == Some(provider);
-        let statuses = crate::engines::local_models::parakeet_models_status();
+        let statuses = crate::engines::model_assets::parakeet_models_status();
         let installed_count = statuses
             .iter()
             .filter(|status| {
                 matches!(
                     status.state,
-                    crate::engines::local_models::LocalModelInstallState::Installed { .. }
+                    crate::engines::model_assets::ParakeetInstallState::Installed { .. }
                 )
             })
             .count();
@@ -406,7 +406,7 @@ impl SettingsApp {
             .filter(|status| {
                 matches!(
                     status.state,
-                    crate::engines::local_models::LocalModelInstallState::Downloading { .. }
+                    crate::engines::model_assets::ParakeetInstallState::Downloading { .. }
                 )
             })
             .count();
@@ -415,7 +415,7 @@ impl SettingsApp {
             .filter(|status| {
                 matches!(
                     status.state,
-                    crate::engines::local_models::LocalModelInstallState::Cancelling { .. }
+                    crate::engines::model_assets::ParakeetInstallState::Cancelling { .. }
                 )
             })
             .count();

@@ -9,7 +9,7 @@ mod pipeline; // record → transcribe → clean up → paste
 mod app; // startup, state, window actions, tracing
 
 // Speech & text engines
-mod engines; // stt, llm, local_models, model_catalog, apple_helper
+mod engines; // stt, llm, model_assets, model_catalog, apple_bridge
 
 // macOS platform integration
 mod platform; // macos APIs, permissions, paste, input/hotkey

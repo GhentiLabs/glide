@@ -62,9 +62,9 @@ impl PersistentHelperClient {
         let request = persistent_request_json(command, input)?;
         for attempt in 0..=1 {
             if self.server.is_none() {
-                profile.measure_result("apple_helper_server_start", || self.start_server())?;
+                profile.measure_result("apple_bridge_server_start", || self.start_server())?;
             } else {
-                profile.record("apple_helper_server_reuse", std::time::Duration::ZERO);
+                profile.record("apple_bridge_server_reuse", std::time::Duration::ZERO);
             }
 
             let result = self
@@ -181,7 +181,7 @@ impl PersistentHelperServer {
             );
         }
 
-        profile.record("apple_helper_round_trip", round_trip_started.elapsed());
+        profile.record("apple_bridge_round_trip", round_trip_started.elapsed());
         decode_persistent_response(command, line.trim())
     }
 }

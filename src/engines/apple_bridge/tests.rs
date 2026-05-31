@@ -5,21 +5,23 @@ fn encodes_helper_requests_as_camel_case() {
     let request = TranscribeRequest {
         audio_path: "/tmp/glide.wav".to_string(),
         model_id: "speechanalyzer-en_US".to_string(),
-        vocabulary: vec!["Glide".to_string()],
         profile: true,
     };
     let json = serde_json::to_string(&request).unwrap();
     assert!(json.contains("audioPath"));
+    assert!(!json.contains("vocabulary"));
     assert!(!json.contains("audio_path"));
 
     let cleanup = CleanupRequest {
         model_id: "apple-foundation-default",
-        raw_text: "hello",
         system_prompt: "clean",
+        user_prompt: "<dictation_cleanup_request>hello</dictation_cleanup_request>",
         profile: true,
     };
     let json = serde_json::to_string(&cleanup).unwrap();
     assert!(json.contains("modelId"));
+    assert!(json.contains("userPrompt"));
+    assert!(!json.contains("rawText"));
     assert!(!json.contains("model_id"));
 }
 
@@ -28,7 +30,6 @@ fn encodes_persistent_helper_envelope() {
     let request = TranscribeRequest {
         audio_path: "/tmp/glide.wav".to_string(),
         model_id: "speechanalyzer-en_US".to_string(),
-        vocabulary: vec!["Glide".to_string()],
         profile: false,
     };
     let input = serde_json::to_vec(&request).unwrap();
@@ -38,6 +39,7 @@ fn encodes_persistent_helper_envelope() {
     assert_eq!(envelope["command"], "transcribe");
     assert_eq!(envelope["request"]["audioPath"], "/tmp/glide.wav");
     assert_eq!(envelope["request"]["modelId"], "speechanalyzer-en_US");
+    assert!(envelope["request"].get("vocabulary").is_none());
 }
 
 #[test]
@@ -87,8 +89,8 @@ done
 
     let cleanup = CleanupRequest {
         model_id: "apple-foundation-default",
-        raw_text: "hello",
         system_prompt: "clean",
+        user_prompt: "<dictation_cleanup_request>hello</dictation_cleanup_request>",
         profile: false,
     };
     let input = serde_json::to_vec(&cleanup).unwrap();

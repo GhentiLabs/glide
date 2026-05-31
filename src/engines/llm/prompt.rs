@@ -1,5 +1,4 @@
 use crate::config::STYLE_PROMPT_PLACEHOLDER;
-
 pub(crate) fn build_cleanup_system_prompt(
     prompt_template: &str,
     style_prompt: Option<&str>,
@@ -7,7 +6,6 @@ pub(crate) fn build_cleanup_system_prompt(
     let style_prompt = style_prompt.unwrap_or_default().trim();
     prompt_template.replace(STYLE_PROMPT_PLACEHOLDER, style_prompt)
 }
-
 pub(crate) fn build_cleanup_user_prompt(raw_text: &str) -> String {
     let mut prompt = String::new();
     let transcript = raw_text.trim();
@@ -21,7 +19,6 @@ pub(crate) fn build_cleanup_user_prompt(raw_text: &str) -> String {
     prompt.push_str("</dictation_cleanup_request>");
     prompt
 }
-
 /// Remove `<think>...</think>` blocks from LLM output.
 pub(crate) fn strip_think_tags(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
@@ -41,7 +38,6 @@ pub(crate) fn strip_think_tags(text: &str) -> String {
     result.push_str(remaining);
     result.trim().to_string()
 }
-
 #[cfg(test)]
 mod tests {
     use super::{build_cleanup_system_prompt, build_cleanup_user_prompt, strip_think_tags};

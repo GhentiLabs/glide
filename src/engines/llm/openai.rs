@@ -9,6 +9,7 @@ use crate::{
 
 use super::build_cleanup_user_prompt;
 
+const ERROR_BODY_CHAR_LIMIT: usize = 4096;
 pub struct OpenAiLlmProvider {
     client: Client,
     provider: Provider,
@@ -18,7 +19,6 @@ pub struct OpenAiLlmProvider {
     api_key: String,
     profile: ProfileCollector,
 }
-
 impl OpenAiLlmProvider {
     pub fn new(
         provider: Provider,
@@ -41,7 +41,6 @@ impl OpenAiLlmProvider {
         })
     }
 }
-
 #[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
     model: String,
@@ -65,14 +64,13 @@ struct ChatCompletionResponse {
 struct ChatChoice {
     message: ChatMessage,
 }
-
 #[async_trait::async_trait]
 impl super::LlmProvider for OpenAiLlmProvider {
     async fn clean(&self, raw_text: &str) -> Result<String> {
         let total_started = std::time::Instant::now();
+
         let request_started = std::time::Instant::now();
         let user_prompt = build_cleanup_user_prompt(raw_text);
-
         let request = ChatCompletionRequest {
             model: self.model.clone(),
             temperature: deterministic_temperature(self.provider, &self.model),
@@ -148,9 +146,6 @@ impl super::LlmProvider for OpenAiLlmProvider {
         "OpenAI GPT"
     }
 }
-
-const ERROR_BODY_CHAR_LIMIT: usize = 4096;
-
 // We use a deterministic temperature (0.0) for models that support it, however
 // I'm not sure if this is the best approach; this needs to be benchmarked.
 fn deterministic_temperature(provider: Provider, model: &str) -> Option<f32> {
@@ -165,7 +160,6 @@ fn openai_model_rejects_temperature_zero(model: &str) -> bool {
     let model = model.trim().to_lowercase();
     model.starts_with("gpt-5") || model.starts_with('o')
 }
-
 fn capped_error_body(body: &str) -> String {
     let trimmed = body.trim();
     if trimmed.is_empty() {
@@ -181,6 +175,5 @@ fn capped_error_body(body: &str) -> String {
         .collect::<String>();
     format!("{prefix}... [truncated]")
 }
-
 #[cfg(test)]
 mod tests;

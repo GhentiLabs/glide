@@ -77,14 +77,12 @@ pub(crate) fn speech_model_request_json(model_id: &str) -> Result<Vec<u8>> {
 pub(crate) fn transcribe_profiled(
     audio: &[u8],
     model_id: String,
-    vocabulary: Vec<String>,
     profile: ProfileCollector,
 ) -> Result<String> {
     let audio_path = write_temp_audio(audio)?;
     let request = TranscribeRequest {
         audio_path: audio_path.to_string_lossy().to_string(),
         model_id,
-        vocabulary,
         profile: profile.is_enabled(),
     };
     let input = serde_json::to_vec(&request).context("failed to encode Apple Speech request")?;
@@ -106,14 +104,14 @@ pub(crate) fn transcribe_profiled(
 
 pub(crate) fn cleanup_profiled(
     model_id: &str,
-    raw_text: &str,
     system_prompt: &str,
+    user_prompt: &str,
     profile: ProfileCollector,
 ) -> Result<String> {
     let request = CleanupRequest {
         model_id,
-        raw_text,
         system_prompt,
+        user_prompt,
         profile: profile.is_enabled(),
     };
     let input =
@@ -136,8 +134,8 @@ pub(crate) fn cleanup_profiled(
 pub(crate) fn prewarm_foundation(model_id: &str, system_prompt: &str) -> Result<()> {
     let request = CleanupRequest {
         model_id,
-        raw_text: "",
         system_prompt,
+        user_prompt: "",
         profile: false,
     };
     let input = serde_json::to_vec(&request)

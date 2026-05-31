@@ -1,3 +1,9 @@
+//! Opportunistic runtime warmup for local providers.
+//!
+//! This module is provider/runtime coordination, not model asset management: it
+//! asks the selected STT/LLM providers to create cached runtime state before the
+//! user needs it.
+
 use std::sync::Arc;
 
 use tokio::runtime::Runtime;
@@ -5,7 +11,7 @@ use tokio::runtime::Runtime;
 use crate::{
     app::state::SharedState,
     config::{GlideConfig, ModelSelection, Provider},
-    engines::apple_helper,
+    engines::apple_bridge,
     engines::llm,
     engines::stt,
 };
@@ -109,7 +115,7 @@ fn prewarm_llm_selection(
     }
 
     let system_prompt = llm::build_cleanup_system_prompt(prompt_template, style_prompt);
-    if let Err(error) = apple_helper::prewarm_foundation(&selection.model, &system_prompt) {
+    if let Err(error) = apple_bridge::prewarm_foundation(&selection.model, &system_prompt) {
         eprintln!(
             "[glide] Apple Foundation prewarm failed for {}: {error:#}",
             selection.model

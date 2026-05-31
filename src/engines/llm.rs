@@ -12,16 +12,13 @@ use crate::{
 
 mod apple;
 mod openai;
-mod util;
-
-pub(crate) use util::{build_cleanup_system_prompt, build_cleanup_user_prompt, strip_think_tags};
-
+mod prompt;
+pub(crate) use prompt::{build_cleanup_system_prompt, build_cleanup_user_prompt, strip_think_tags};
 #[async_trait::async_trait]
 pub trait LlmProvider: Send + Sync {
     async fn clean(&self, raw_text: &str) -> Result<String>;
     fn name(&self) -> &'static str;
 }
-
 pub(crate) fn build_profiled_provider(
     provider: Provider,
     model: &str,

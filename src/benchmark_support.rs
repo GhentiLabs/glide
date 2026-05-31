@@ -14,16 +14,10 @@ pub fn build_profiled_stt_provider(
     provider: Provider,
     model: &str,
     providers: &ProvidersConfig,
-    vocabulary_prompt: Option<String>,
+    vocabulary: &[String],
     profile: ProfileCollector,
 ) -> Result<Box<dyn SttProvider>> {
-    crate::engines::stt::build_profiled_provider(
-        provider,
-        model,
-        providers,
-        vocabulary_prompt,
-        profile,
-    )
+    crate::engines::stt::build_profiled_provider(provider, model, providers, vocabulary, profile)
 }
 
 pub fn build_llm_provider(

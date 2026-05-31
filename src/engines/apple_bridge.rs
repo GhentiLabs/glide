@@ -1,3 +1,9 @@
+//! Rust bridge to the bundled Swift `GlideAppleHelper` process.
+//!
+//! This module owns the process/JSON boundary for Apple-only frameworks used by
+//! both model management and inference. Callers should keep domain logic in
+//! their own modules and use this bridge only to run Swift helper commands.
+
 mod operations;
 mod process;
 mod transport;

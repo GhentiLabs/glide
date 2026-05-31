@@ -1,31 +1,20 @@
 use anyhow::Result;
 
-use crate::{audio::AudioFormat, engines::apple_helper, profile::ProfileCollector};
+use crate::{audio::AudioFormat, engines::apple_bridge, profile::ProfileCollector};
 
 pub struct AppleSpeechProvider {
     model_id: String,
-    vocabulary: Vec<String>,
     profile: ProfileCollector,
 }
 
 impl AppleSpeechProvider {
-    pub fn new(
-        model_id: &str,
-        vocabulary_prompt: Option<String>,
-        profile: ProfileCollector,
-    ) -> Result<Self> {
-        let model_id = crate::engines::local_models::resolve_apple_speech_model_id(model_id)
-            .ok_or_else(|| anyhow::anyhow!("Apple Speech model is not installed: {model_id}"))?;
+    pub fn new(model_id: &str, profile: ProfileCollector) -> Result<Self> {
+        anyhow::ensure!(
+            crate::engines::model_assets::apple_speech_locale_id(model_id).is_some(),
+            "unknown Apple Speech model: {model_id}"
+        );
         Ok(Self {
-            model_id,
-            vocabulary: vocabulary_prompt
-                .unwrap_or_default()
-                .split(',')
-                .map(str::trim)
-                .filter(|term| !term.is_empty())
-                .take(100)
-                .map(ToOwned::to_owned)
-                .collect(),
+            model_id: model_id.to_string(),
             profile,
         })
     }
@@ -40,10 +29,9 @@ impl super::SttProvider for AppleSpeechProvider {
 
         let audio = audio.to_vec();
         let model_id = self.model_id.clone();
-        let vocabulary = self.vocabulary.clone();
         let profile = self.profile.clone();
         tokio::task::spawn_blocking(move || {
-            apple_helper::transcribe_profiled(&audio, model_id, vocabulary, profile)
+            apple_bridge::transcribe_profiled(&audio, model_id, profile)
         })
         .await?
     }

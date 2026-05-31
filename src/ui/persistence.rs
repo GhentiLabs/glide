@@ -50,7 +50,7 @@ impl SettingsApp {
                 cx.background_executor().timer(Duration::from_secs(3)).await;
                 if crate::engines::model_catalog::any_provider_verified() {
                     let _ = shared.update_config(|config| {
-                        crate::engines::model_catalog::apply_smart_defaults_initial(config);
+                        crate::engines::model_catalog::apply_smart_defaults(config);
                     });
                 }
                 let _ = this.update(cx, |_this, cx| cx.notify());

@@ -10,7 +10,6 @@ use std::{
     net::TcpListener,
     thread,
 };
-
 #[tokio::test]
 async fn records_remote_provider_spans_with_mock_server() {
     let Some(server) = MockHttpServer::try_spawn(
@@ -62,7 +61,6 @@ async fn records_remote_provider_spans_with_mock_server() {
             .contains("<<<GLIDE_RAW_TRANSCRIPT\nraw text\nGLIDE_RAW_TRANSCRIPT")
     );
 }
-
 #[tokio::test]
 async fn omits_temperature_for_openai_reasoning_models() {
     let Some(server) = MockHttpServer::try_spawn(
@@ -122,7 +120,6 @@ async fn keeps_temperature_for_openai_compatible_providers() {
         assert_eq!(body["messages"].as_array().unwrap().len(), 2);
     }
 }
-
 #[tokio::test]
 async fn preserves_error_status_and_body() {
     for (status_line, expected_status) in [
@@ -158,7 +155,6 @@ async fn preserves_error_status_and_body() {
         server.join();
     }
 }
-
 fn providers_for_mock(provider: Provider, base_url: String) -> ProvidersConfig {
     let credentials = ProviderCredentials {
         api_key: "test-key".to_string(),

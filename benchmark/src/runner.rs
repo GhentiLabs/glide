@@ -135,17 +135,12 @@ fn run_stt_once(
     collector.mark("stt_start");
     let mut error_phase = None;
     let result = (|| -> Result<TextSummary> {
-        let vocab_prompt = if config.dictionary.vocabulary.is_empty() {
-            None
-        } else {
-            Some(config.dictionary.vocabulary.join(", "))
-        };
         let provider = collector.measure_result("stt_provider_build", || {
             glide_core::build_profiled_stt_provider(
                 options.provider,
                 &options.model,
                 &config.providers,
-                vocab_prompt,
+                &config.dictionary.vocabulary,
                 collector.clone(),
             )
         });
@@ -300,17 +295,12 @@ fn run_flow_once(
             ));
         }
 
-        let vocab_prompt = if config.dictionary.vocabulary.is_empty() {
-            None
-        } else {
-            Some(config.dictionary.vocabulary.join(", "))
-        };
         let stt_provider = match collector.measure_result("flow_stt_provider_build", || {
             glide_core::build_profiled_stt_provider(
                 resolved.stt.provider,
                 &resolved.stt.model,
                 &config.providers,
-                vocab_prompt,
+                &config.dictionary.vocabulary,
                 collector.clone(),
             )
         }) {

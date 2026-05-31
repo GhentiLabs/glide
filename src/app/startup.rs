@@ -32,10 +32,8 @@ fn start_app(config: GlideConfig, cx: &mut App) {
     let runtime = Arc::new(Runtime::new().expect("failed to start async runtime"));
 
     crate::platform::preload_app_icons();
-    crate::engines::local_models::prewarm::start_app_prewarm(shared.clone(), runtime.clone());
+    crate::engines::prewarm::start_app_prewarm(shared.clone(), runtime.clone());
     crate::engines::model_catalog::fetch_all_models(&shared.snapshot().config.providers);
-
-    // --- Actions, key bindings, and menu bar ---
     actions::init(cx, shared.clone());
     actions::register(cx);
     actions::bind_keybindings(cx);
@@ -44,8 +42,6 @@ fn start_app(config: GlideConfig, cx: &mut App) {
     // Apply saved theme preference at startup
     let snap = shared.snapshot();
     ui::apply_theme_preference(snap.config.app.theme, snap.config.app.accent, None, cx);
-
-    // --- Background services ---
     hotkey::start_listener(shared.clone(), runtime);
 
     let overlay_shared = shared.clone();
@@ -55,7 +51,5 @@ fn start_app(config: GlideConfig, cx: &mut App) {
         controller
     });
     cx.set_global(overlay::OverlayHandle::new(overlay_entity));
-
-    // --- Open initial settings window ---
     actions::ensure_settings_window(cx);
 }
