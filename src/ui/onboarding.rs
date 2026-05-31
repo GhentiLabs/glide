@@ -12,8 +12,6 @@ use strum::VariantArray as _;
 use crate::config::HotkeyTrigger;
 use crate::platform::permissions;
 
-// --- OS-dependent hotkey presets ---
-
 #[cfg(target_os = "macos")]
 fn hotkey_presets() -> [(HotkeyTrigger, &'static str); 4] {
     [
@@ -70,8 +68,6 @@ fn hotkey_hint_text() -> &'static str {
      because it\u{2019}s rarely used by other apps."
 }
 
-// --- Step enum ---
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::VariantArray)]
 pub(super) enum OnboardingStep {
     Welcome,
@@ -99,8 +95,6 @@ impl OnboardingStep {
             .copied()
     }
 }
-
-// --- Permission state ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PermissionState {
@@ -131,13 +125,9 @@ fn permission_granted(statuses: &[permissions::PermissionStatus], name: &str) ->
         .unwrap_or(false)
 }
 
-// --- Onboarding methods on SettingsApp ---
-
 use super::SettingsApp;
 
 impl SettingsApp {
-    // --- Navigation ---
-
     fn onboarding_can_advance(&self) -> bool {
         match self.onboarding_step {
             OnboardingStep::Hotkey => self.onboarding_selected_trigger.is_some(),
@@ -179,8 +169,6 @@ impl SettingsApp {
         cx.notify();
     }
 
-    // --- Main overlay render ---
-
     pub(super) fn render_onboarding_overlay(
         &mut self,
         window: &mut Window,
@@ -220,16 +208,13 @@ impl SettingsApp {
             .child(self.render_ob_footer(window, cx))
     }
 
-    // --- Step renderers ---
-
     fn render_ob_welcome(
         &self,
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let accent = self.shared.snapshot().config.app.accent;
-        let icon_path = crate::platform::accent_icon_path(accent)
-            .unwrap_or_else(|| crate::config::asset_path("assets/icons/logo.svg"));
+        let icon_path = crate::config::asset_path(accent.icon_asset());
 
         div()
             .flex()
@@ -665,8 +650,6 @@ impl SettingsApp {
             )
             .child(flow)
     }
-
-    // --- Footer ---
 
     fn render_ob_footer(
         &self,

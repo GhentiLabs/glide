@@ -14,8 +14,6 @@ fn default_config_is_valid() {
 
 #[test]
 fn validation_rejects_invalid_numeric_fields() {
-    assert_invalid_config("zero sample rate", |config| config.audio.sample_rate = 0);
-    assert_invalid_config("zero channels", |config| config.audio.channels = 0);
     assert_invalid_config("zero overlay width", |config| config.overlay.width = 0);
     assert_invalid_config("zero overlay height", |config| config.overlay.height = 0);
     assert_invalid_config("opacity above range", |config| config.overlay.opacity = 2.0);

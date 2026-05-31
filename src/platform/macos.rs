@@ -5,10 +5,6 @@ use std::sync::OnceLock;
 
 use anyhow::{Context as _, Result};
 
-use crate::config::{ColorAccent, asset_path};
-
-// --- Objective-C runtime FFI ---
-
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
 #[link(name = "Foundation", kind = "framework")]
@@ -24,6 +20,7 @@ type MsgSendPtr = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) ->
 type MsgSendUsize =
     unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
 type MsgSendLen = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+type MsgSendRect = unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSRect;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -34,31 +31,29 @@ struct NSRect {
     h: f64,
 }
 
-type MsgSendRect = unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSRect;
-
-// --- Application listing ---
+#[derive(Copy, Clone)]
+struct NotchDimensions {
+    width: f64,
+    height: f64,
+}
 
 pub fn list_applications() -> Vec<String> {
     let mut apps: Vec<String> = std::fs::read_dir("/Applications")
         .into_iter()
         .flatten()
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().map(|e| e == "app").unwrap_or(false) {
-                path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
-            } else {
-                None
-            }
-        })
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| application_name(&entry.path()))
         .collect();
     apps.sort_by_key(|app| app.to_lowercase());
     apps
 }
 
-// --- App icon extraction ---
+fn application_name(path: &Path) -> Option<String> {
+    path.extension()
+        .is_some_and(|extension| extension == "app")
+        .then(|| path.file_stem()?.to_str().map(str::to_string))
+        .flatten()
+}
 
 static ICON_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -71,38 +66,7 @@ fn icon_cache_dir() -> &'static Path {
 }
 
 pub fn app_icon_path(app_name: &str) -> Option<PathBuf> {
-    let png_path = icon_cache_dir().join(format!("{app_name}.png"));
-    if png_path.exists() {
-        Some(png_path)
-    } else {
-        None
-    }
-}
-
-pub fn accent_icon_path(accent: ColorAccent) -> Option<PathBuf> {
-    let source_path = asset_path(accent.icns_asset());
-    let png_path = icon_cache_dir().join(format!(
-        "glide-app-icon-{}.png",
-        accent.label().to_lowercase()
-    ));
-    let needs_refresh = match (fs::metadata(&source_path), fs::metadata(&png_path)) {
-        (Ok(source), Ok(cached)) => match (source.modified(), cached.modified()) {
-            (Ok(source_time), Ok(cached_time)) => source_time > cached_time,
-            _ => true,
-        },
-        (Ok(_), Err(_)) => true,
-        _ => false,
-    };
-    if (!png_path.exists() || needs_refresh)
-        && extract_icon_file_to_png(&source_path, &png_path).is_err()
-    {
-        return None;
-    }
-    if png_path.exists() {
-        Some(png_path)
-    } else {
-        None
-    }
+    existing_path(icon_cache_dir().join(format!("{app_name}.png")))
 }
 
 pub fn preload_app_icons() {
@@ -120,21 +84,15 @@ pub fn preload_app_icons() {
     });
 }
 
+fn existing_path(path: PathBuf) -> Option<PathBuf> {
+    path.exists().then_some(path)
+}
+
 fn extract_icon_to_png(app_name: &str, dest: &Path) -> Result<()> {
     let msg1: MsgSendPtr = unsafe { std::mem::transmute(objc_msgSend as *const ()) };
 
     unsafe {
-        let workspace_class = objc_getClass(c"NSWorkspace".as_ptr());
-        if workspace_class.is_null() {
-            anyhow::bail!("NSWorkspace class not found");
-        }
-        let workspace = objc_msgSend(
-            workspace_class,
-            sel_registerName(c"sharedWorkspace".as_ptr()),
-        );
-        if workspace.is_null() {
-            anyhow::bail!("failed to get NSWorkspace");
-        }
+        let workspace = shared_workspace()?;
 
         let app_path = std::ffi::CString::new(format!("/Applications/{app_name}.app"))
             .context("invalid app name")?;
@@ -161,53 +119,22 @@ fn extract_icon_to_png(app_name: &str, dest: &Path) -> Result<()> {
     }
 }
 
-fn extract_icon_file_to_png(source: &Path, dest: &Path) -> Result<()> {
-    let source = source
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("non-utf8 icon path: {}", source.display()))?;
-
-    let image = nsimage_from_path(source)?;
-    write_nsimage_png(image, dest)
-}
-
-fn nsimage_from_path(path: &str) -> Result<*mut c_void> {
+fn shared_workspace() -> Result<*mut c_void> {
     unsafe {
-        let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
-
-        let ns_string_class = objc_getClass(c"NSString".as_ptr());
-        if ns_string_class.is_null() {
-            anyhow::bail!("NSString class not found");
+        let workspace_class = objc_getClass(c"NSWorkspace".as_ptr());
+        if workspace_class.is_null() {
+            anyhow::bail!("NSWorkspace class not found");
         }
-        let alloc = objc_msgSend(ns_string_class, sel_registerName(c"alloc".as_ptr()));
-        type MsgSendInitString =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, *const u8, usize, usize) -> *mut c_void;
-        let msg_init_str: MsgSendInitString = std::mem::transmute(objc_msgSend as *const ());
-        let ns_path = msg_init_str(
-            alloc,
-            sel_registerName(c"initWithBytes:length:encoding:".as_ptr()),
-            path.as_bytes().as_ptr(),
-            path.len(),
-            4, // NSUTF8StringEncoding
+
+        let workspace = objc_msgSend(
+            workspace_class,
+            sel_registerName(c"sharedWorkspace".as_ptr()),
         );
-        if ns_path.is_null() {
-            anyhow::bail!("failed to create NSString path");
+        if workspace.is_null() {
+            anyhow::bail!("failed to get NSWorkspace");
         }
 
-        let ns_image_class = objc_getClass(c"NSImage".as_ptr());
-        if ns_image_class.is_null() {
-            anyhow::bail!("NSImage class not found");
-        }
-        let image_alloc = objc_msgSend(ns_image_class, sel_registerName(c"alloc".as_ptr()));
-        let image = msg_ptr(
-            image_alloc,
-            sel_registerName(c"initWithContentsOfFile:".as_ptr()),
-            ns_path,
-        );
-        if image.is_null() {
-            anyhow::bail!("failed to load icon image");
-        }
-
-        Ok(image)
+        Ok(workspace)
     }
 }
 
@@ -261,8 +188,6 @@ fn write_nsimage_png(image: *mut c_void, dest: &Path) -> Result<()> {
     }
 }
 
-// --- Fuzzy matching ---
-
 pub fn fuzzy_match(query: &str, candidate: &str) -> Option<i32> {
     if query.is_empty() {
         return Some(0);
@@ -284,23 +209,11 @@ pub fn fuzzy_match(query: &str, candidate: &str) -> Option<i32> {
     }
 }
 
-// --- Frontmost app detection ---
-
 pub fn frontmost_app_name() -> Option<String> {
     let msg1: MsgSendPtr = unsafe { std::mem::transmute(objc_msgSend as *const ()) };
 
     unsafe {
-        let workspace_class = objc_getClass(c"NSWorkspace".as_ptr());
-        if workspace_class.is_null() {
-            return None;
-        }
-        let workspace = objc_msgSend(
-            workspace_class,
-            sel_registerName(c"sharedWorkspace".as_ptr()),
-        );
-        if workspace.is_null() {
-            return None;
-        }
+        let workspace = shared_workspace().ok()?;
 
         let app = objc_msgSend(
             workspace,
@@ -331,8 +244,6 @@ pub fn frontmost_app_name() -> Option<String> {
     }
 }
 
-// --- Screen size ---
-
 unsafe extern "C" {
     fn CGMainDisplayID() -> u32;
     fn CGDisplayPixelsWide(display: u32) -> usize;
@@ -346,35 +257,17 @@ pub fn main_display_size() -> (usize, usize) {
     }
 }
 
-// --- Notch detection ---
-
 pub fn notch_width() -> Option<u32> {
-    unsafe {
-        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
-        if ns_screen.is_null() {
-            return None;
-        }
-        let screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
-        if screen.is_null() {
-            return None;
-        }
-
-        let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
-
-        let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
-        let left_area = msg_rect(screen, sel_registerName(c"auxiliaryTopLeftArea".as_ptr()));
-        let right_area = msg_rect(screen, sel_registerName(c"auxiliaryTopRightArea".as_ptr()));
-
-        if left_area.w == 0.0 && right_area.w == 0.0 {
-            return None;
-        }
-
-        let nw = frame.w - left_area.w - right_area.w;
-        if nw > 0.0 { Some(nw as u32) } else { None }
-    }
+    notch_dimensions_for_main_screen().map(|notch| notch.width as u32)
 }
 
 pub fn notch_dimensions() -> Option<(f64, f64)> {
+    notch_dimensions_for_main_screen()
+        .filter(|notch| notch.height > 0.0)
+        .map(|notch| (notch.width, notch.height))
+}
+
+fn notch_dimensions_for_main_screen() -> Option<NotchDimensions> {
     unsafe {
         let ns_screen = objc_getClass(c"NSScreen".as_ptr());
         if ns_screen.is_null() {
@@ -395,10 +288,10 @@ pub fn notch_dimensions() -> Option<(f64, f64)> {
             return None;
         }
 
-        let nw = frame.w - left_area.w - right_area.w;
-        let nh = left_area.h;
-        if nw > 0.0 && nh > 0.0 {
-            Some((nw, nh))
+        let width = frame.w - left_area.w - right_area.w;
+        let height = left_area.h;
+        if width > 0.0 {
+            Some(NotchDimensions { width, height })
         } else {
             None
         }

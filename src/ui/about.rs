@@ -17,8 +17,7 @@ impl AboutView {
 impl Render for AboutView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = self.shared.config().app.accent;
-        let icon_path = crate::platform::accent_icon_path(accent)
-            .unwrap_or_else(|| crate::config::asset_path("assets/icons/logo.svg"));
+        let icon_path = crate::config::asset_path(accent.icon_asset());
 
         div()
             .flex()

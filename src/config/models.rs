@@ -8,17 +8,22 @@ const MESSAGING_PROMPT: &str = include_str!("prompts/messaging.md");
 const CODING_PROMPT: &str = include_str!("prompts/coding.md");
 pub const STYLE_PROMPT_PLACEHOLDER: &str = "{{STYLE}}";
 
-const LEGACY_DEFAULT_PROMPT_HASHES: &[u64] = &[0xc209_be5b_8876_64a4];
-const LEGACY_PROFESSIONAL_PROMPT_HASHES: &[u64] = &[0x7778_211a_d268_2d40];
-const LEGACY_MESSAGING_PROMPT_HASHES: &[u64] = &[0xc156_ddf1_366f_599f];
-const LEGACY_CODING_PROMPT_HASHES: &[u64] = &[0x81ba_1e2c_9520_f6f3];
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelSelection {
     pub provider: Provider,
     pub model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Style {
+    pub name: String,
+    #[serde(default)]
+    pub apps: Vec<String>,
+    pub prompt: String,
+    #[serde(default)]
+    pub stt: Option<ModelSelection>,
+    #[serde(default)]
+    pub llm: Option<ModelSelection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,29 +50,7 @@ impl Default for DictationConfig {
             smart_defaults_applied: false,
             system_prompt: DEFAULT_PROMPT.trim_end().to_string(),
             system_prompt_uses_default: true,
-            styles: vec![
-                Style {
-                    name: "Professional".to_string(),
-                    apps: vec![],
-                    prompt: PROFESSIONAL_PROMPT.trim_end().to_string(),
-                    stt: None,
-                    llm: None,
-                },
-                Style {
-                    name: "Messaging".to_string(),
-                    apps: vec![],
-                    prompt: MESSAGING_PROMPT.trim_end().to_string(),
-                    stt: None,
-                    llm: None,
-                },
-                Style {
-                    name: "Coding".to_string(),
-                    apps: vec![],
-                    prompt: CODING_PROMPT.trim_end().to_string(),
-                    stt: None,
-                    llm: None,
-                },
-            ],
+            styles: default_styles(),
         }
     }
 }
@@ -83,14 +66,11 @@ impl DictationConfig {
     }
 
     pub fn refresh_builtin_prompt_defaults(&mut self) {
-        let prompt_matches_known_default = prompt_matches_current_or_legacy(
-            &self.system_prompt,
-            Self::default_system_prompt(),
-            LEGACY_DEFAULT_PROMPT_HASHES,
-        );
+        let prompt_matches_default =
+            normalized_prompt(&self.system_prompt) == Self::default_system_prompt();
 
-        if self.system_prompt_uses_default || prompt_matches_known_default {
-            if prompt_matches_known_default {
+        if self.system_prompt_uses_default || prompt_matches_default {
+            if prompt_matches_default {
                 self.system_prompt = Self::default_system_prompt().to_string();
                 self.system_prompt_uses_default = true;
             } else {
@@ -109,18 +89,12 @@ impl DictationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Style {
-    pub name: String,
+pub struct ReplacementRule {
+    pub find: String,
+    pub replace: String,
     #[serde(default)]
-    pub apps: Vec<String>,
-    pub prompt: String,
-    #[serde(default)]
-    pub stt: Option<ModelSelection>,
-    #[serde(default)]
-    pub llm: Option<ModelSelection>,
+    pub case_sensitive: bool,
 }
-
-// --- Dictionary config ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -129,52 +103,40 @@ pub struct DictionaryConfig {
     pub replacements: Vec<ReplacementRule>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplacementRule {
-    pub find: String,
-    pub replace: String,
-    #[serde(default)]
-    pub case_sensitive: bool,
-}
-
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+fn default_styles() -> Vec<Style> {
+    [
+        ("Professional", PROFESSIONAL_PROMPT),
+        ("Messaging", MESSAGING_PROMPT),
+        ("Coding", CODING_PROMPT),
+    ]
+    .into_iter()
+    .map(|(name, prompt)| Style {
+        name: name.to_string(),
+        apps: vec![],
+        prompt: prompt.trim_end().to_string(),
+        stt: None,
+        llm: None,
+    })
+    .collect()
 }
 
 fn normalized_prompt(prompt: &str) -> &str {
     prompt.trim_end()
 }
 
-fn prompt_matches_current_or_legacy(
-    prompt: &str,
-    current: &'static str,
-    legacy_hashes: &[u64],
-) -> bool {
-    let prompt = normalized_prompt(prompt);
-    prompt == normalized_prompt(current) || legacy_hashes.contains(&prompt_hash(prompt))
-}
-
-fn prompt_hash(prompt: &str) -> u64 {
-    let mut hash = FNV_OFFSET;
-    for byte in normalized_prompt(prompt).bytes() {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
-}
-
 fn default_style_prompt_if_unedited(name: &str, prompt: &str) -> Option<&'static str> {
-    let (current, legacy_hashes) = match name {
-        "Professional" => (
-            PROFESSIONAL_PROMPT.trim_end(),
-            LEGACY_PROFESSIONAL_PROMPT_HASHES,
-        ),
-        "Messaging" => (MESSAGING_PROMPT.trim_end(), LEGACY_MESSAGING_PROMPT_HASHES),
-        "Coding" => (CODING_PROMPT.trim_end(), LEGACY_CODING_PROMPT_HASHES),
+    let current = match name {
+        "Professional" => PROFESSIONAL_PROMPT.trim_end(),
+        "Messaging" => MESSAGING_PROMPT.trim_end(),
+        "Coding" => CODING_PROMPT.trim_end(),
         _ => return None,
     };
 
-    prompt_matches_current_or_legacy(prompt, current, legacy_hashes).then_some(current)
+    (normalized_prompt(prompt) == current).then_some(current)
 }
 
 #[cfg(test)]

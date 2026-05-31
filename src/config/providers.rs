@@ -119,8 +119,8 @@ impl Provider {
             "Groq" => Some(Self::Groq),
             "Cerebras" => Some(Self::Cerebras),
             "Fireworks" => Some(Self::Fireworks),
-            "ElevenLabs" | "Eleven Labs" => Some(Self::ElevenLabs),
-            "Apple Local" | "Apple Intelligence" => Some(Self::AppleLocal),
+            "ElevenLabs" => Some(Self::ElevenLabs),
+            "Apple Intelligence" => Some(Self::AppleLocal),
             "Parakeet" => Some(Self::Parakeet),
             _ => None,
         }
@@ -135,6 +135,31 @@ impl Provider {
             "elevenlabs" => Some(Self::ElevenLabs),
             _ => None,
         }
+    }
+}
+
+fn fireworks_uses_default_inference_base(base: &str) -> bool {
+    let trimmed = base.trim().trim_end_matches('/');
+    trimmed.is_empty()
+        || trimmed == Provider::Fireworks.default_base_url()
+        || trimmed == "https://api.fireworks.ai/inference"
+        || trimmed.contains("api.fireworks.ai/inference")
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProviderCredentials {
+    #[serde(skip)]
+    pub api_key: String,
+    pub base_url: String,
+}
+
+impl ProviderCredentials {
+    pub fn resolve_api_key(&self, label: &str) -> Result<String> {
+        if !self.api_key.trim().is_empty() {
+            return Ok(self.api_key.trim().to_string());
+        }
+        anyhow::bail!("missing {label} API key; set it in Glide settings")
     }
 }
 
@@ -206,31 +231,6 @@ impl ProvidersConfig {
         Provider::REMOTE
             .into_iter()
             .map(|provider| (provider, self.credentials_for(provider)))
-    }
-}
-
-fn fireworks_uses_default_inference_base(base: &str) -> bool {
-    let trimmed = base.trim().trim_end_matches('/');
-    trimmed.is_empty()
-        || trimmed == Provider::Fireworks.default_base_url()
-        || trimmed == "https://api.fireworks.ai/inference"
-        || trimmed.contains("api.fireworks.ai/inference")
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct ProviderCredentials {
-    #[serde(skip)]
-    pub api_key: String,
-    pub base_url: String,
-}
-
-impl ProviderCredentials {
-    pub fn resolve_api_key(&self, label: &str) -> Result<String> {
-        if !self.api_key.trim().is_empty() {
-            return Ok(self.api_key.trim().to_string());
-        }
-        anyhow::bail!("missing {label} API key; set it in Glide settings")
     }
 }
 
