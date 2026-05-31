@@ -1,3 +1,7 @@
+// This file is probably gonna need to be deleted at some point, seems like
+// the trace is mostly good. Its a pretty efficient app bottlenecked by APIs
+// at the moment.
+
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
