@@ -29,8 +29,6 @@ pub(in crate::ui::overlay) const GLOW_BREATHE_MIN_SCALE: f64 = 0.86;
 pub(in crate::ui::overlay) const GLOW_BREATHE_MAX_SCALE: f64 = 1.18;
 pub(in crate::ui::overlay) const GLOW_SPIN_DURATION: f64 = 12.0;
 
-// --- Objective-C / AppKit FFI ---
-
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
 #[link(name = "QuartzCore", kind = "framework")]

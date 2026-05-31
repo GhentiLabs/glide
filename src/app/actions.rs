@@ -7,8 +7,6 @@ use gpui::{
 use gpui_component::Root;
 
 use crate::{app::state::SharedAppState, ui};
-
-// --- Action definitions ---
 // A lot of these actions are just so we can define the menu bar for macOS
 // (kinda dumb but no menu bar/standard actions is worse sooo...)
 actions!(
@@ -29,8 +27,6 @@ actions!(
     ]
 );
 
-// --- Shared action state ---
-
 /// Tracks the settings window so we can reopen/close it specifically.
 // GPUI/macOS does not give this window a stable app-level identity for us.
 struct SettingsWindowState {
@@ -39,8 +35,6 @@ struct SettingsWindowState {
 }
 
 impl Global for SettingsWindowState {}
-
-// --- Startup wiring ---
 
 pub(crate) fn init(cx: &mut App, shared: Arc<SharedAppState>) {
     cx.set_global(SettingsWindowState {
@@ -66,8 +60,6 @@ pub(crate) fn bind_keybindings(cx: &mut App) {
     ]);
 }
 
-// --- Settings window entry points ---
-
 pub(crate) fn ensure_settings_window(cx: &mut App) {
     if activate_existing_settings_window(cx) {
         return;
@@ -83,8 +75,6 @@ pub(crate) fn ensure_settings_window_if_initialized(cx: &mut App) {
         ensure_settings_window(cx);
     }
 }
-
-// --- Action handlers ---
 
 fn close_settings_window(cx: &mut App) {
     let handle = cx.global::<SettingsWindowState>().handle;
@@ -126,8 +116,6 @@ fn minimize_active_window(cx: &mut App) {
 fn zoom_active_window(cx: &mut App) {
     update_active_window(cx, Window::zoom_window);
 }
-
-// --- Window helpers ---
 
 fn activate_existing_settings_window(cx: &mut App) -> bool {
     let handle = cx.global::<SettingsWindowState>().handle;
