@@ -20,9 +20,9 @@ pub use apple::{
 #[allow(unused_imports)]
 pub use parakeet::{
     PARAKEET_MODELS, ParakeetInstallState, ParakeetModelDefinition, ParakeetModelStatus,
-    cancel_parakeet_download, delete_parakeet_model, parakeet_definition,
-    parakeet_has_active_downloads, parakeet_install_state, parakeet_model_dir,
-    parakeet_models_status, start_parakeet_download, validate_parakeet_model_dir,
+    cancel_parakeet_download, delete_parakeet_model, parakeet_definition, parakeet_install_state,
+    parakeet_model_dir, parakeet_models_status, start_parakeet_download,
+    validate_parakeet_model_dir,
 };
 
 // Test-only helpers surfaced for the sibling `tests` module. Only

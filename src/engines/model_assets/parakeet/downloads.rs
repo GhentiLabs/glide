@@ -89,10 +89,6 @@ pub fn delete_parakeet_model(id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn parakeet_has_active_downloads() -> bool {
-    downloads().any_active()
-}
-
 fn finish_parakeet_download(definition: ParakeetModelDefinition, run: DownloadRun) {
     if let Err(error) = download_and_install_parakeet(definition, &run) {
         downloads().finish_error(&run, ParakeetInstallState::Failed(error.to_string()));

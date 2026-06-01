@@ -430,15 +430,21 @@ pub(super) fn parakeet_model_row(
     )
 }
 
-/// Notify the settings view every 750 ms until `is_active` reports no in-flight
-/// downloads, so download progress and completion render live.
-fn poll_downloads(cx: &mut gpui::Context<SettingsApp>, is_active: fn() -> bool) {
+pub(super) fn poll_parakeet_downloads(cx: &mut gpui::Context<SettingsApp>) {
     cx.spawn(async move |this, cx| {
         loop {
             cx.background_executor()
                 .timer(Duration::from_millis(750))
                 .await;
-            let downloading = is_active();
+            let downloading = crate::engines::model_assets::parakeet_models_status()
+                .iter()
+                .any(|status| {
+                    matches!(
+                        status.state,
+                        crate::engines::model_assets::ParakeetInstallState::Downloading { .. }
+                            | crate::engines::model_assets::ParakeetInstallState::Cancelling { .. }
+                    )
+                });
             let _ = this.update(cx, |_this, cx| cx.notify());
             if !downloading {
                 break;
@@ -448,18 +454,20 @@ fn poll_downloads(cx: &mut gpui::Context<SettingsApp>, is_active: fn() -> bool) 
     .detach();
 }
 
-pub(super) fn poll_parakeet_downloads(cx: &mut gpui::Context<SettingsApp>) {
-    poll_downloads(
-        cx,
-        crate::engines::model_assets::parakeet_has_active_downloads,
-    );
-}
-
 pub(super) fn poll_apple_speech_downloads(cx: &mut gpui::Context<SettingsApp>) {
-    poll_downloads(
-        cx,
-        crate::engines::model_assets::apple_speech_has_active_downloads,
-    );
+    cx.spawn(async move |this, cx| {
+        loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(750))
+                .await;
+            let downloading = crate::engines::model_assets::apple_speech_has_active_downloads();
+            let _ = this.update(cx, |_this, cx| cx.notify());
+            if !downloading {
+                break;
+            }
+        }
+    })
+    .detach();
 }
 
 pub(super) fn format_bytes(bytes: u64) -> String {
