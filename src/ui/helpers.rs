@@ -409,57 +409,6 @@ pub(super) fn model_dropdown_button(
     model_dropdown_wrapper(current_logo, popover)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn model(
-        provider: &str,
-        id: &str,
-        display_name: &str,
-    ) -> crate::engines::model_catalog::ModelInfo {
-        crate::engines::model_catalog::ModelInfo {
-            id: id.to_string(),
-            display_name: display_name.to_string(),
-            provider: provider.to_string(),
-            logo: String::new(),
-            installed: false,
-        }
-    }
-
-    #[test]
-    fn model_display_name_strips_only_known_provider_prefixes() {
-        let cases = [
-            (
-                "Fireworks",
-                "accounts/fireworks/models/gpt-oss-20b",
-                "accounts/fireworks/models/gpt-oss-20b",
-                "gpt-oss-20b",
-            ),
-            (
-                "Groq",
-                "openai/gpt-oss-120b",
-                "openai/gpt-oss-120b",
-                "gpt-oss-120b",
-            ),
-            (
-                "Groq",
-                "meta-llama/llama-4-scout-17b-16e-instruct",
-                "meta-llama/llama-4-scout-17b-16e-instruct",
-                "llama-4-scout-17b-16e-instruct",
-            ),
-            ("Other", "vendor/model", "vendor/model", "vendor/model"),
-        ];
-
-        for (provider, id, display_name, expected) in cases {
-            assert_eq!(
-                model_display_name(&model(provider, id, display_name)),
-                expected
-            );
-        }
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(super) fn style_model_dropdown(
     id: &str,
@@ -568,4 +517,55 @@ pub(super) fn style_model_dropdown(
         });
 
     model_dropdown_wrapper(current_logo, popover)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model(
+        provider: &str,
+        id: &str,
+        display_name: &str,
+    ) -> crate::engines::model_catalog::ModelInfo {
+        crate::engines::model_catalog::ModelInfo {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            provider: provider.to_string(),
+            logo: String::new(),
+            installed: false,
+        }
+    }
+
+    #[test]
+    fn model_display_name_strips_only_known_provider_prefixes() {
+        let cases = [
+            (
+                "Fireworks",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "gpt-oss-20b",
+            ),
+            (
+                "Groq",
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-120b",
+                "gpt-oss-120b",
+            ),
+            (
+                "Groq",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-4-scout-17b-16e-instruct",
+            ),
+            ("Other", "vendor/model", "vendor/model", "vendor/model"),
+        ];
+
+        for (provider, id, display_name, expected) in cases {
+            assert_eq!(
+                model_display_name(&model(provider, id, display_name)),
+                expected
+            );
+        }
+    }
 }

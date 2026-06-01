@@ -1,4 +1,3 @@
-#[cfg(not(test))]
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(not(test))]
@@ -7,7 +6,6 @@ use super::types::APPLE_FOUNDATION_MODEL_DEFINITIONS;
 use super::types::APPLE_FOUNDATION_MODEL_ID;
 use super::types::AppleFoundationModelStatus;
 
-#[cfg(not(test))]
 static APPLE_FOUNDATION_MODELS: OnceLock<Mutex<Option<Vec<AppleFoundationModelStatus>>>> =
     OnceLock::new();
 
@@ -84,10 +82,6 @@ fn unavailable_apple_foundation_models(reason: String) -> Vec<AppleFoundationMod
         .collect()
 }
 
-#[cfg(test)]
-pub(super) fn invalidate_apple_foundation_model_cache() {}
-
-#[cfg(not(test))]
 pub(super) fn invalidate_apple_foundation_model_cache() {
     if let Ok(mut cache) = APPLE_FOUNDATION_MODELS
         .get_or_init(|| Mutex::new(None))

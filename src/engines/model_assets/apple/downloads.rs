@@ -258,14 +258,11 @@ pub(in crate::engines::model_assets) fn set_apple_speech_download_state_for_test
     id: &str,
     state: AppleSpeechInstallState,
 ) {
-    if matches!(
+    let active = matches!(
         state,
         AppleSpeechInstallState::Downloading { .. } | AppleSpeechInstallState::Cancelling
-    ) {
-        downloads().set_active_for_test(id, state);
-    } else {
-        downloads().set_inactive_for_test(id, state);
-    }
+    );
+    downloads().set_state_for_test(id, state, active);
 }
 
 #[cfg(test)]

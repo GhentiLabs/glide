@@ -198,6 +198,15 @@ impl<State: Clone> DownloadRegistry<State> {
     }
 
     #[cfg(test)]
+    pub(super) fn set_state_for_test(&self, id: &str, state: State, active: bool) {
+        if active {
+            self.set_active_for_test(id, state);
+        } else {
+            self.set_inactive_for_test(id, state);
+        }
+    }
+
+    #[cfg(test)]
     pub(super) fn set_inactive_for_test(&self, id: &str, state: State) {
         if let Ok(mut entries) = self.entries.lock() {
             entries.insert(

@@ -91,7 +91,6 @@ impl GlideConfig {
             let config = Self::default();
             confy::store(CONFIG_APP_NAME, CONFIG_NAME, &config)
                 .map_err(|e| anyhow::anyhow!("failed to reset config: {e}"))?;
-            storage::save_provider_keys_to_keyring(&storage::provider_keys_from_config(&config));
         }
 
         Ok(backup_path)

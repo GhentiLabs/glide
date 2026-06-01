@@ -1,8 +1,10 @@
 use gpui::prelude::*;
-use gpui::{App, Bounds, Window, WindowBounds, WindowOptions, div, point, px, size};
+use gpui::{
+    App, Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, px, size,
+};
 use gpui_component::ActiveTheme;
-use gpui_component::Root;
 use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::scroll::ScrollableElement;
 
 use crate::config::GlideConfig;
 
@@ -15,18 +17,17 @@ pub(crate) fn open_config_recovery_window(
 ) {
     let _ = cx.open_window(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                point(px(0.0), px(0.0)),
-                size(px(560.0), px(360.0)),
-            ))),
-            window_min_size: Some(size(px(460.0), px(320.0))),
+            window_bounds: Some(WindowBounds::centered(size(px(540.0), px(340.0)), cx)),
+            titlebar: None,
+            kind: WindowKind::PopUp,
+            window_background: WindowBackgroundAppearance::Transparent,
+            is_resizable: false,
+            is_minimizable: false,
             ..Default::default()
         },
         move |window, cx| {
             window.set_window_title("Glide Config Error");
-            let view = cx.new(|_| ConfigRecoveryView::new(error, on_recovered));
-            let any_view: gpui::AnyView = view.into();
-            cx.new(|cx| Root::new(any_view, window, cx))
+            cx.new(|_| ConfigRecoveryView::new(error, on_recovered))
         },
     );
 }
@@ -57,13 +58,13 @@ impl Render for ConfigRecoveryView {
             .flex()
             .flex_col()
             .gap_3()
-            .w_full()
-            .max_w(px(500.0))
+            .size_full()
             .p(px(20.0))
             .rounded_lg()
             .border_1()
             .border_color(cx.theme().border)
-            .bg(cx.theme().secondary)
+            .bg(cx.theme().background)
+            .shadow_lg()
             .child(
                 div()
                     .text_lg()
@@ -94,10 +95,12 @@ impl Render for ConfigRecoveryView {
             div()
                 .text_xs()
                 .p_3()
+                .flex_1()
+                .overflow_y_scrollbar()
                 .rounded_md()
                 .border_1()
                 .border_color(cx.theme().border)
-                .bg(cx.theme().background)
+                .bg(cx.theme().secondary)
                 .text_color(cx.theme().foreground)
                 .child(self.load_error.clone()),
         );
@@ -153,8 +156,10 @@ impl Render for ConfigRecoveryView {
             .items_center()
             .justify_center()
             .size_full()
-            .p(px(24.0))
-            .bg(cx.theme().background)
+            .p(px(16.0))
+            .bg(gpui::transparent_black())
+            .font_family(cx.theme().font_family.clone())
+            .text_color(cx.theme().foreground)
             .child(panel)
     }
 }

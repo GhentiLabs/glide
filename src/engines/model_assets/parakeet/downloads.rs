@@ -89,6 +89,10 @@ pub fn delete_parakeet_model(id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn parakeet_has_active_downloads() -> bool {
+    downloads().any_active()
+}
+
 fn finish_parakeet_download(definition: ParakeetModelDefinition, run: DownloadRun) {
     if let Err(error) = download_and_install_parakeet(definition, &run) {
         downloads().finish_error(&run, ParakeetInstallState::Failed(error.to_string()));
@@ -242,14 +246,11 @@ pub(in crate::engines::model_assets) fn transient_install_state(
 
 #[cfg(test)]
 pub(crate) fn set_parakeet_install_state_for_test(id: &str, state: ParakeetInstallState) {
-    if matches!(
+    let active = matches!(
         state,
         ParakeetInstallState::Downloading { .. } | ParakeetInstallState::Cancelling { .. }
-    ) {
-        downloads().set_active_for_test(id, state);
-    } else {
-        downloads().set_inactive_for_test(id, state);
-    }
+    );
+    downloads().set_state_for_test(id, state, active);
 }
 
 #[cfg(test)]

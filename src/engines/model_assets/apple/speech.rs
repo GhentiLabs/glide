@@ -8,7 +8,6 @@ use super::{
     },
 };
 
-#[cfg(not(test))]
 static APPLE_SPEECH_MODELS: OnceLock<Mutex<Option<Vec<AppleSpeechModelDefinition>>>> =
     OnceLock::new();
 static APPLE_SPEECH_MODELS_UNAVAILABLE_REASON: OnceLock<Mutex<Option<String>>> = OnceLock::new();
@@ -164,12 +163,6 @@ pub(super) fn apple_speech_model_definitions() -> Vec<AppleSpeechModelDefinition
     }
 }
 
-#[cfg(test)]
-pub(super) fn invalidate_apple_speech_model_cache() {
-    set_apple_speech_models_unavailable_reason(None);
-}
-
-#[cfg(not(test))]
 pub(super) fn invalidate_apple_speech_model_cache() {
     if let Ok(mut cache) = APPLE_SPEECH_MODELS.get_or_init(|| Mutex::new(None)).lock() {
         *cache = None;

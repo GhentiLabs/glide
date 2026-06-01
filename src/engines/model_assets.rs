@@ -20,11 +20,14 @@ pub use apple::{
 #[allow(unused_imports)]
 pub use parakeet::{
     PARAKEET_MODELS, ParakeetInstallState, ParakeetModelDefinition, ParakeetModelStatus,
-    cancel_parakeet_download, delete_parakeet_model, parakeet_definition, parakeet_install_state,
-    parakeet_model_dir, parakeet_models_status, start_parakeet_download,
-    validate_parakeet_model_dir,
+    cancel_parakeet_download, delete_parakeet_model, parakeet_definition,
+    parakeet_has_active_downloads, parakeet_install_state, parakeet_model_dir,
+    parakeet_models_status, start_parakeet_download, validate_parakeet_model_dir,
 };
 
+// Test-only helpers surfaced for the sibling `tests` module. Only
+// `set_parakeet_install_state_for_test` is reused by other crate tests; the rest
+// stay module-private.
 #[cfg(test)]
 use apple::{
     apple_speech_download_state_for_test, reset_apple_speech_download_for_test,

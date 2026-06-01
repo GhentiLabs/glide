@@ -9,7 +9,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
 use strum::VariantArray as _;
 
-use crate::config::HotkeyTrigger;
+use crate::config::{ColorAccent, HotkeyTrigger};
 use crate::platform::permissions;
 
 #[cfg(target_os = "macos")]
@@ -71,6 +71,7 @@ fn hotkey_hint_text() -> &'static str {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::VariantArray)]
 pub(super) enum OnboardingStep {
     Welcome,
+    Theme,
     Permissions,
     Hotkey,
     HowItWorks,
@@ -125,7 +126,7 @@ fn permission_granted(statuses: &[permissions::PermissionStatus], name: &str) ->
         .unwrap_or(false)
 }
 
-use super::SettingsApp;
+use super::{SettingsApp, apply_theme_preference};
 
 impl SettingsApp {
     fn onboarding_can_advance(&self) -> bool {
@@ -194,6 +195,9 @@ impl SettingsApp {
                         OnboardingStep::Welcome => {
                             self.render_ob_welcome(window, cx).into_any_element()
                         }
+                        OnboardingStep::Theme => {
+                            self.render_ob_theme(window, cx).into_any_element()
+                        }
                         OnboardingStep::Permissions => {
                             self.render_ob_permissions(window, cx).into_any_element()
                         }
@@ -240,6 +244,112 @@ impl SettingsApp {
                          release \u{2014} cleaned text is pasted into any app.",
                     ),
             )
+    }
+
+    fn render_ob_theme(
+        &self,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let snapshot = self.shared.snapshot();
+        let current_accent = snapshot.config.app.accent;
+        let preview_icon = crate::config::asset_path(current_accent.icon_asset());
+
+        let mut options = div()
+            .flex()
+            .flex_wrap()
+            .justify_center()
+            .gap(px(12.0))
+            .w_full()
+            .max_w(px(520.0));
+
+        for accent in ColorAccent::VARIANTS.iter().copied() {
+            let is_selected = accent == current_accent;
+            let icon_path = crate::config::asset_path(accent.icon_asset());
+            let (h, s, l, a) = accent.primary_hsla();
+            let swatch = gpui::hsla(h, s, l, a);
+
+            options = options.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "theme-color-{}",
+                        accent.label()
+                    )))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(8.0))
+                    .w(px(112.0))
+                    .h(px(128.0))
+                    .rounded_lg()
+                    .border_2()
+                    .cursor_pointer()
+                    .when(is_selected, |d| {
+                        d.border_color(cx.theme().primary)
+                            .bg(cx.theme().primary.opacity(0.08))
+                    })
+                    .when(!is_selected, |d| {
+                        d.border_color(cx.theme().border).bg(cx.theme().muted)
+                    })
+                    .child(
+                        div()
+                            .relative()
+                            .child(img(icon_path).w(px(56.0)).h(px(56.0)))
+                            .child(
+                                div()
+                                    .absolute()
+                                    .right(px(-4.0))
+                                    .bottom(px(-4.0))
+                                    .w(px(18.0))
+                                    .h(px(18.0))
+                                    .rounded_full()
+                                    .border_2()
+                                    .border_color(cx.theme().background)
+                                    .bg(swatch),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(cx.theme().foreground)
+                            .child(accent.label()),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let pref = this.shared.snapshot().config.app.theme;
+                        let _ = this.shared.update_config(|config| {
+                            config.app.accent = accent;
+                        });
+                        apply_theme_preference(pref, accent, Some(window), cx);
+                        cx.notify();
+                    })),
+            );
+        }
+
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(18.0))
+            .max_w(px(560.0))
+            .child(img(preview_icon).w(px(76.0)).h(px(76.0)))
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(cx.theme().foreground)
+                    .child("Choose Your Theme Color"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .text_center()
+                    .max_w(px(420.0))
+                    .child("Pick the Glide icon and accent color you want to use."),
+            )
+            .child(options)
     }
 
     fn render_ob_permissions(

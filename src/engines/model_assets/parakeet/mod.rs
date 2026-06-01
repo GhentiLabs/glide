@@ -4,7 +4,10 @@ mod paths;
 mod status;
 mod types;
 
-pub use downloads::{cancel_parakeet_download, delete_parakeet_model, start_parakeet_download};
+pub use downloads::{
+    cancel_parakeet_download, delete_parakeet_model, parakeet_has_active_downloads,
+    start_parakeet_download,
+};
 pub use paths::{parakeet_model_dir, validate_parakeet_model_dir};
 pub use status::{parakeet_install_state, parakeet_models_status};
 pub use types::{
