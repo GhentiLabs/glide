@@ -2,7 +2,6 @@ use super::*;
 use crate::{
     config::{Provider, ProvidersConfig, providers::ProviderCredentials},
     engines::llm::LlmProvider,
-    profile::ProfileCollector,
 };
 use serde_json::Value;
 use std::{
@@ -11,7 +10,7 @@ use std::{
     thread,
 };
 #[tokio::test]
-async fn records_remote_provider_spans_with_mock_server() {
+async fn sends_cleanup_request_to_mock_server() {
     let Some(server) = MockHttpServer::try_spawn(
         r#"{"choices":[{"message":{"role":"assistant","content":"cleaned text"}}]}"#,
     ) else {
@@ -25,28 +24,17 @@ async fn records_remote_provider_spans_with_mock_server() {
         },
         ..Default::default()
     };
-    let profile = ProfileCollector::enabled();
     let provider = OpenAiLlmProvider::new(
         Provider::OpenAi,
         "test-model",
         &crate::engines::llm::build_cleanup_system_prompt("system {{STYLE}}", Some("style")),
         &providers,
-        profile.clone(),
     )
     .unwrap();
 
     let cleaned = provider.clean("raw text").await.unwrap();
 
     assert_eq!(cleaned, "cleaned text");
-    let phases = profile
-        .spans()
-        .into_iter()
-        .map(|span| span.phase)
-        .collect::<Vec<_>>();
-    assert!(phases.contains(&"remote_llm_json_request_build".to_string()));
-    assert!(phases.contains(&"remote_llm_http_send_status".to_string()));
-    assert!(phases.contains(&"remote_llm_response_parse".to_string()));
-    assert!(phases.contains(&"remote_llm_provider_total".to_string()));
     let request = server.join();
     let body: Value = serde_json::from_str(request.split("\r\n\r\n").last().unwrap()).unwrap();
     assert_eq!(body["temperature"].as_f64(), Some(0.0));
@@ -81,7 +69,6 @@ async fn omits_temperature_for_openai_reasoning_models() {
         "gpt-5.4-nano",
         &crate::engines::llm::build_cleanup_system_prompt("system", None),
         &providers,
-        ProfileCollector::disabled(),
     )
     .unwrap();
 
@@ -107,7 +94,6 @@ async fn keeps_temperature_for_openai_compatible_providers() {
             "test-model",
             &crate::engines::llm::build_cleanup_system_prompt("system", None),
             &providers,
-            ProfileCollector::disabled(),
         )
         .unwrap();
 
@@ -144,7 +130,6 @@ async fn preserves_error_status_and_body() {
             "gpt-4o-mini",
             &crate::engines::llm::build_cleanup_system_prompt("system", None),
             &providers,
-            ProfileCollector::disabled(),
         )
         .unwrap();
 

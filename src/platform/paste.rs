@@ -1,7 +1,4 @@
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::{thread, time::Duration};
 
 use anyhow::{Context, Result};
 use arboard::Clipboard;
@@ -99,7 +96,6 @@ where
 }
 
 fn restore_clipboard_async(previous_text: String, delay: Duration) {
-    let scheduled = Instant::now();
     spawn_delayed_restore(delay, move || {
         let result = (|| -> Result<()> {
             let mut clipboard = Clipboard::new().context("failed to re-open clipboard")?;
@@ -109,10 +105,7 @@ fn restore_clipboard_async(previous_text: String, delay: Duration) {
         })();
 
         match result {
-            Ok(()) => eprintln!(
-                "[glide] Paste: restored clipboard after {} ms",
-                scheduled.elapsed().as_millis()
-            ),
+            Ok(()) => eprintln!("[glide] Paste: restored clipboard"),
             Err(error) => eprintln!("[glide] Paste: failed to restore clipboard: {error:#}"),
         }
     });
@@ -120,6 +113,8 @@ fn restore_clipboard_async(previous_text: String, delay: Duration) {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use super::*;
 
     #[test]

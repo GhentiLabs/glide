@@ -1,11 +1,6 @@
-use std::{
-    sync::{Mutex, OnceLock},
-    time::{Duration, Instant},
-};
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{Context, Result};
-
-use crate::profile::ProfileCollector;
 
 #[cfg(not(test))]
 use super::types::{AppleFoundationModel, AppleSpeechModel};
@@ -13,8 +8,7 @@ use super::{
     process::{helper_path, run_helper, write_temp_audio},
     transport::PersistentHelperClient,
     types::{
-        AppleCapabilities, CleanupRequest, HelperResponse, HelperTiming, SpeechModelRequest,
-        TranscribeRequest,
+        AppleCapabilities, CleanupRequest, HelperResponse, SpeechModelRequest, TranscribeRequest,
     },
 };
 
@@ -74,61 +68,37 @@ pub(crate) fn speech_model_request_json(model_id: &str) -> Result<Vec<u8>> {
         .context("failed to encode Apple Speech model request")
 }
 
-pub(crate) fn transcribe_profiled(
-    audio: &[u8],
-    model_id: String,
-    profile: ProfileCollector,
-) -> Result<String> {
+pub(crate) fn transcribe(audio: &[u8], model_id: String) -> Result<String> {
     let audio_path = write_temp_audio(audio)?;
     let request = TranscribeRequest {
         audio_path: audio_path.to_string_lossy().to_string(),
         model_id,
-        profile: profile.is_enabled(),
     };
     let input = serde_json::to_vec(&request).context("failed to encode Apple Speech request")?;
-    let started = Instant::now();
-    let result = run_persistent_helper("transcribe", &input, &profile).and_then(|response| {
-        record_helper_timings(&profile, "apple_stt_helper", &response.timings);
+    let result = run_persistent_helper("transcribe", &input).and_then(|response| {
         response
             .text
             .map(|text| text.trim().to_string())
             .context("Apple Speech helper did not return text")
     });
-    eprintln!(
-        "[glide] Apple helper: transcribe request finished in {} ms",
-        started.elapsed().as_millis()
-    );
     std::fs::remove_file(&audio_path).ok();
     result
 }
 
-pub(crate) fn cleanup_profiled(
-    model_id: &str,
-    system_prompt: &str,
-    user_prompt: &str,
-    profile: ProfileCollector,
-) -> Result<String> {
+pub(crate) fn cleanup(model_id: &str, system_prompt: &str, user_prompt: &str) -> Result<String> {
     let request = CleanupRequest {
         model_id,
         system_prompt,
         user_prompt,
-        profile: profile.is_enabled(),
     };
     let input =
         serde_json::to_vec(&request).context("failed to encode Apple Foundation Models request")?;
-    let started = Instant::now();
-    let result = run_persistent_helper("cleanup", &input, &profile).and_then(|response| {
-        record_helper_timings(&profile, "apple_foundation_helper", &response.timings);
+    run_persistent_helper("cleanup", &input).and_then(|response| {
         response
             .text
             .map(|text| text.trim().to_string())
             .context("Apple Foundation Models helper did not return text")
-    });
-    eprintln!(
-        "[glide] Apple helper: cleanup request finished in {} ms",
-        started.elapsed().as_millis()
-    );
-    result
+    })
 }
 
 pub(crate) fn prewarm_foundation(model_id: &str, system_prompt: &str) -> Result<()> {
@@ -136,40 +106,17 @@ pub(crate) fn prewarm_foundation(model_id: &str, system_prompt: &str) -> Result<
         model_id,
         system_prompt,
         user_prompt: "",
-        profile: false,
     };
     let input = serde_json::to_vec(&request)
         .context("failed to encode Apple Foundation prewarm request")?;
-    let started = Instant::now();
-    let result = run_persistent_helper("prewarm-foundation", &input, &ProfileCollector::disabled())
-        .map(|_| ());
-    eprintln!(
-        "[glide] Apple helper: prewarm request finished in {} ms",
-        started.elapsed().as_millis()
-    );
-    result
+    run_persistent_helper("prewarm-foundation", &input).map(|_| ())
 }
 
-fn run_persistent_helper(
-    command: &str,
-    input: &[u8],
-    profile: &ProfileCollector,
-) -> Result<HelperResponse> {
+fn run_persistent_helper(command: &str, input: &[u8]) -> Result<HelperResponse> {
     let helper = helper_path()?;
     let client = PERSISTENT_HELPER.get_or_init(|| Mutex::new(PersistentHelperClient::new(helper)));
     client
         .lock()
         .expect("Apple persistent helper client poisoned")
-        .request(command, input, profile)
-}
-
-fn record_helper_timings(profile: &ProfileCollector, prefix: &str, timings: &[HelperTiming]) {
-    for timing in timings {
-        if timing.duration_ms.is_finite() && timing.duration_ms >= 0.0 {
-            profile.record(
-                format!("{prefix}_{}", timing.phase),
-                Duration::from_secs_f64(timing.duration_ms / 1000.0),
-            );
-        }
-    }
+        .request(command, input)
 }

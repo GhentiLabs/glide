@@ -67,18 +67,10 @@ actor Runtime {
         switch envelope.command {
         case "transcribe":
             let request: TranscribeRequest = try GlideAppleHelper.decodeServeRequest(envelope.requestData)
-            if request.profile == true {
-                let result = try await transcribeProfiled(request)
-                return HelperResponse(ok: true, text: result.text, timings: result.timings)
-            }
             let text = try await transcribe(request)
             return HelperResponse(ok: true, text: text)
         case "cleanup":
             let request: CleanupRequest = try GlideAppleHelper.decodeServeRequest(envelope.requestData)
-            if request.profile == true {
-                let result = try await cleanupProfiled(request)
-                return HelperResponse(ok: true, text: result.text, timings: result.timings)
-            }
             let text = try await cleanup(request)
             return HelperResponse(ok: true, text: text)
         case "prewarm-foundation":

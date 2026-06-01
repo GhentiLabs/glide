@@ -2,10 +2,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::{Provider, ProvidersConfig},
-    profile::ProfileCollector,
-};
+use crate::config::{Provider, ProvidersConfig};
 
 use super::build_cleanup_user_prompt;
 
@@ -17,7 +14,6 @@ pub struct OpenAiLlmProvider {
     model: String,
     system_prompt: String,
     api_key: String,
-    profile: ProfileCollector,
 }
 impl OpenAiLlmProvider {
     pub fn new(
@@ -25,7 +21,6 @@ impl OpenAiLlmProvider {
         model: &str,
         system_prompt: &str,
         providers: &ProvidersConfig,
-        profile: ProfileCollector,
     ) -> Result<Self> {
         let creds = providers.credentials_for(provider);
         let api_key = creds.resolve_api_key("LLM")?;
@@ -37,7 +32,6 @@ impl OpenAiLlmProvider {
             model: model.to_string(),
             system_prompt: system_prompt.to_string(),
             api_key,
-            profile,
         })
     }
 }
@@ -67,9 +61,6 @@ struct ChatChoice {
 #[async_trait::async_trait]
 impl super::LlmProvider for OpenAiLlmProvider {
     async fn clean(&self, raw_text: &str) -> Result<String> {
-        let total_started = std::time::Instant::now();
-
-        let request_started = std::time::Instant::now();
         let user_prompt = build_cleanup_user_prompt(raw_text);
         let request = ChatCompletionRequest {
             model: self.model.clone(),
@@ -85,16 +76,7 @@ impl super::LlmProvider for OpenAiLlmProvider {
                 },
             ],
         };
-        self.profile
-            .record("remote_llm_json_request_build", request_started.elapsed());
 
-        let send_started = std::time::Instant::now();
-        self.profile
-            .record_since_marker("llm_start", "llm_start_to_llm_http_send_start");
-        self.profile
-            .record_since_marker("flow_release", "flow_release_to_llm_http_send_start");
-        self.profile
-            .record_since_marker("flow_stt_result", "flow_stt_result_to_llm_http_send_start");
         let response = self
             .client
             .post(&self.endpoint)
@@ -109,8 +91,6 @@ impl super::LlmProvider for OpenAiLlmProvider {
                 )
             })?;
         let status = response.status();
-        self.profile
-            .record("remote_llm_http_send_status", send_started.elapsed());
         if !status.is_success() {
             let body = response
                 .text()
@@ -123,21 +103,16 @@ impl super::LlmProvider for OpenAiLlmProvider {
             );
         }
 
-        let parse_started = std::time::Instant::now();
         let parsed: ChatCompletionResponse = response
             .json()
             .await
             .context("failed to parse OpenAI chat response")?;
-        self.profile
-            .record("remote_llm_response_parse", parse_started.elapsed());
 
         let cleaned = parsed
             .choices
             .first()
             .map(|choice| choice.message.content.trim().to_string())
             .context("OpenAI chat response did not include any choices")?;
-        self.profile
-            .record("remote_llm_provider_total", total_started.elapsed());
 
         Ok(cleaned)
     }

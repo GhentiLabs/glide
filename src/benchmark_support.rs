@@ -8,16 +8,14 @@ pub use crate::config::{
 };
 pub use crate::engines::llm::LlmProvider;
 pub use crate::engines::stt::SttProvider;
-pub use crate::profile::{ProfileCollector, SpanRecord};
 
-pub fn build_profiled_stt_provider(
+pub fn build_stt_provider(
     provider: Provider,
     model: &str,
     providers: &ProvidersConfig,
     vocabulary: &[String],
-    profile: ProfileCollector,
 ) -> Result<Box<dyn SttProvider>> {
-    crate::engines::stt::build_profiled_provider(provider, model, providers, vocabulary, profile)
+    crate::engines::stt::build_provider(provider, model, providers, vocabulary)
 }
 
 pub fn build_llm_provider(
@@ -26,31 +24,7 @@ pub fn build_llm_provider(
     system_prompt: &str,
     providers: &ProvidersConfig,
 ) -> Result<Box<dyn LlmProvider>> {
-    crate::engines::llm::build_profiled_provider(
-        provider,
-        model,
-        system_prompt,
-        None,
-        providers,
-        ProfileCollector::disabled(),
-    )
-}
-
-pub fn build_profiled_llm_provider(
-    provider: Provider,
-    model: &str,
-    system_prompt: &str,
-    providers: &ProvidersConfig,
-    profile: ProfileCollector,
-) -> Result<Box<dyn LlmProvider>> {
-    crate::engines::llm::build_profiled_provider(
-        provider,
-        model,
-        system_prompt,
-        None,
-        providers,
-        profile,
-    )
+    crate::engines::llm::build_provider(provider, model, system_prompt, None, providers)
 }
 
 pub fn strip_think_tags(text: &str) -> String {

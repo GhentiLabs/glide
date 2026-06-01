@@ -57,8 +57,6 @@ pub struct AppleSpeechInstallProgress {
 pub(super) struct HelperResponse {
     pub(super) ok: bool,
     pub(super) text: Option<String>,
-    #[serde(default)]
-    pub(super) timings: Vec<HelperTiming>,
     #[cfg_attr(test, allow(dead_code))]
     #[serde(default)]
     pub(super) speech_models: Vec<AppleSpeechModel>,
@@ -74,19 +72,11 @@ pub(super) struct HelperResponse {
     pub(super) error: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct HelperTiming {
-    pub(super) phase: String,
-    pub(super) duration_ms: f64,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct TranscribeRequest {
     pub(super) audio_path: String,
     pub(super) model_id: String,
-    pub(super) profile: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -101,7 +91,6 @@ pub(super) struct CleanupRequest<'a> {
     pub(super) model_id: &'a str,
     pub(super) system_prompt: &'a str,
     pub(super) user_prompt: &'a str,
-    pub(super) profile: bool,
 }
 
 #[derive(Debug, Serialize)]

@@ -5,7 +5,7 @@
 //!
 //! **Inference stages** — the two sequential steps the [`pipeline`] runs on a
 //! recording. They look structurally similar on purpose (each is a provider
-//! `trait` plus a `build_profiled_provider` factory that dispatches on the
+//! `trait` plus a `build_provider` factory that dispatches on the
 //! configured [`Provider`]), but they do different jobs:
 //!
 //! - [`stt`] — speech-to-text: audio bytes → raw transcript text

@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use cpal::{
@@ -9,11 +6,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
-use crate::{
-    app::state::LiveAudioData,
-    app::trace::{TraceSession, attrs},
-    config::AudioConfig,
-};
+use crate::{app::state::LiveAudioData, config::AudioConfig};
 
 const RING_BUFFER_SIZE: usize = 8192;
 const DEFAULT_INPUT_DEVICE: &str = "default";
@@ -79,14 +72,7 @@ impl AudioRecorder {
     }
 
     pub fn stop(&mut self) -> Result<RecordedAudio> {
-        self.stop_profiled(&TraceSession::disabled())
-    }
-
-    pub(crate) fn stop_profiled(&mut self, trace: &TraceSession) -> Result<RecordedAudio> {
-        let total_started = Instant::now();
-        let active = trace.measure_result("audio_stop_take_active", || {
-            self.active.take().context("recording is not active")
-        })?;
+        let active = self.active.take().context("recording is not active")?;
 
         let ActiveRecording {
             stream,
@@ -95,26 +81,12 @@ impl AudioRecorder {
             live_audio: _live_audio,
         } = active;
 
-        trace.measure("audio_stop_drop_stream", || drop(stream));
+        drop(stream);
 
-        let samples = trace.measure("audio_stop_clone_samples", || {
-            samples.lock().expect("samples poisoned").clone()
-        });
+        let samples = samples.lock().expect("samples poisoned").clone();
         anyhow::ensure!(!samples.is_empty(), "no audio samples were captured");
 
-        let bytes = trace.measure_result("audio_stop_wav_encode", || {
-            encode_wav(&samples, sample_rate)
-        })?;
-
-        trace.record_with_attrs(
-            "audio_stop_total",
-            total_started.elapsed(),
-            attrs([
-                ("sample_count", samples.len().to_string()),
-                ("byte_count", bytes.len().to_string()),
-                ("sample_rate", sample_rate.to_string()),
-            ]),
-        );
+        let bytes = encode_wav(&samples, sample_rate)?;
 
         Ok(RecordedAudio {
             bytes,

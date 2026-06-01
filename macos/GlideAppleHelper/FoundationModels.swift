@@ -78,15 +78,6 @@ extension GlideAppleHelper {
         return try await runtime.cleanup(request)
     }
 
-    static func cleanupProfiled(_ request: CleanupRequest) async throws -> (text: String, timings: [HelperTiming]) {
-        guard #available(macOS 26.0, *) else {
-            throw HelperError("Apple Foundation Models require macOS 26 or newer")
-        }
-
-        let runtime = Runtime()
-        return try await runtime.cleanupProfiled(request)
-    }
-
     static func prewarmFoundation(_ request: CleanupRequest) async throws {
         guard #available(macOS 26.0, *) else {
             throw HelperError("Apple Foundation Models require macOS 26 or newer")
@@ -134,20 +125,6 @@ extension Runtime {
             )
         }
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func cleanupProfiled(_ request: CleanupRequest) async throws -> (text: String, timings: [HelperTiming]) {
-        let started = Date()
-        let text = try await cleanup(request)
-        return (
-            text,
-            [
-                HelperTiming(
-                    phase: "swift_cleanup_total",
-                    durationMs: Date().timeIntervalSince(started) * 1000
-                )
-            ]
-        )
     }
 
     private func takeWarmFoundationSession(for key: String) -> LanguageModelSession? {

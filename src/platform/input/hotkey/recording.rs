@@ -1,10 +1,5 @@
-use std::time::Instant;
-
 use crate::{
-    app::{
-        state::{OverlayPhase, RuntimeStatus},
-        trace::{TraceSession, attrs},
-    },
+    app::state::{OverlayPhase, RuntimeStatus},
     audio::RecordedAudio,
     engines::prewarm,
     pipeline,
@@ -114,97 +109,45 @@ fn start_recording(ctx: &mut TapContext) {
 }
 
 pub(super) fn handle_release(ctx: &mut TapContext) {
-    let release_started = Instant::now();
-    let trace = TraceSession::from_env("dictation");
-    trace.instant("hotkey_release");
     ctx.pressed = false;
 
-    trace.measure("hotkey_release_overlay_processing", || {
-        ctx.shared.set_overlay_phase(OverlayPhase::Processing)
-    });
-    trace.measure("hotkey_release_clear_live_audio", || {
-        ctx.shared.set_live_audio(None)
-    });
+    ctx.shared.set_overlay_phase(OverlayPhase::Processing);
+    ctx.shared.set_live_audio(None);
 
-    let stop_started = Instant::now();
-    let stop_result = if trace.is_enabled() {
-        ctx.recorder.stop_profiled(&trace)
-    } else {
-        ctx.recorder.stop()
-    };
-    trace.record("hotkey_release_recorder_stop", stop_started.elapsed());
-
-    match stop_result {
+    match ctx.recorder.stop() {
         Ok(audio) => {
-            handle_recorded_audio(ctx, audio, trace, release_started);
+            handle_recorded_audio(ctx, audio);
         }
         Err(error) => {
-            handle_stop_error(ctx, &trace, error);
+            handle_stop_error(ctx, error);
         }
     }
 }
 
-fn handle_recorded_audio(
-    ctx: &mut TapContext,
-    audio: RecordedAudio,
-    trace: TraceSession,
-    release_started: Instant,
-) {
-    trace.instant_with_attrs(
-        "hotkey_release_audio_ready",
-        attrs([
-            ("sample_count", audio.sample_count.to_string()),
-            ("byte_count", audio.bytes.len().to_string()),
-        ]),
-    );
-    trace.measure("hotkey_release_status_uploading", || {
-        ctx.shared.set_status(RuntimeStatus::Processing)
-    });
+fn handle_recorded_audio(ctx: &mut TapContext, audio: RecordedAudio) {
+    ctx.shared.set_status(RuntimeStatus::Processing);
 
     let shared = ctx.shared.clone();
-    let target_app = trace.measure("hotkey_release_frontmost_app_snapshot", || {
-        shared.frontmost_app()
-    });
-    trace.record_since("hotkey_release_to_task_spawn", release_started);
+    let target_app = shared.frontmost_app();
 
     ctx.runtime.spawn(async move {
-        trace.record_since("hotkey_release_to_task_start", release_started);
-        match pipeline::process_recording(
-            shared.clone(),
-            audio,
-            target_app,
-            trace.clone(),
-            Some(release_started),
-        )
-        .await
-        {
+        match pipeline::process_recording(shared.clone(), audio, target_app).await {
             Ok(()) => {
-                trace.measure("hotkey_release_overlay_dismiss_success", || {
-                    shared.set_overlay_phase(OverlayPhase::Dismissed)
-                });
+                shared.set_overlay_phase(OverlayPhase::Dismissed);
             }
             Err(error) => {
-                trace.instant_with_attrs("pipeline_error", attrs([("message", error.to_string())]));
                 eprintln!("pipeline error: {error:#}");
                 shared.set_error();
-                trace.measure("hotkey_release_overlay_dismiss_error", || {
-                    shared.set_overlay_phase(OverlayPhase::Dismissed)
-                });
+                shared.set_overlay_phase(OverlayPhase::Dismissed);
             }
         }
     });
 }
 
-fn handle_stop_error(ctx: &mut TapContext, trace: &TraceSession, error: anyhow::Error) {
-    trace.instant_with_attrs(
-        "hotkey_release_stop_error",
-        attrs([("message", error.to_string())]),
-    );
+fn handle_stop_error(ctx: &mut TapContext, error: anyhow::Error) {
     eprintln!("recording stop error: {error:#}");
     ctx.shared.set_error();
-    trace.measure("hotkey_release_overlay_dismiss_stop_error", || {
-        dismiss_overlay(ctx)
-    });
+    dismiss_overlay(ctx);
 }
 
 fn dismiss_overlay(ctx: &TapContext) {

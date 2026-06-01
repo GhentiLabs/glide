@@ -17,11 +17,6 @@ mod platform; // macos APIs, permissions, paste, input/hotkey
 // User interface
 mod ui; // settings window, overlay, menu
 
-mod profile {
-    pub use glide_tools::{ProfileCollector, SpanRecord};
-}
-
-// Benchmark is separate cause I don't like bloat.
 #[cfg(feature = "benchmark-support")]
 pub mod benchmark_support;
 

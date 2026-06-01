@@ -5,7 +5,6 @@ fn encodes_helper_requests_as_camel_case() {
     let request = TranscribeRequest {
         audio_path: "/tmp/glide.wav".to_string(),
         model_id: "speechanalyzer-en_US".to_string(),
-        profile: true,
     };
     let json = serde_json::to_string(&request).unwrap();
     assert!(json.contains("audioPath"));
@@ -16,7 +15,6 @@ fn encodes_helper_requests_as_camel_case() {
         model_id: "apple-foundation-default",
         system_prompt: "clean",
         user_prompt: "<dictation_cleanup_request>hello</dictation_cleanup_request>",
-        profile: true,
     };
     let json = serde_json::to_string(&cleanup).unwrap();
     assert!(json.contains("modelId"));
@@ -30,7 +28,6 @@ fn encodes_persistent_helper_envelope() {
     let request = TranscribeRequest {
         audio_path: "/tmp/glide.wav".to_string(),
         model_id: "speechanalyzer-en_US".to_string(),
-        profile: false,
     };
     let input = serde_json::to_vec(&request).unwrap();
     let encoded = persistent_request_json("transcribe", &input).unwrap();
@@ -91,13 +88,10 @@ done
         model_id: "apple-foundation-default",
         system_prompt: "clean",
         user_prompt: "<dictation_cleanup_request>hello</dictation_cleanup_request>",
-        profile: false,
     };
     let input = serde_json::to_vec(&cleanup).unwrap();
     let mut client = PersistentHelperClient::new(helper);
-    let response = client
-        .request("cleanup", &input, &ProfileCollector::disabled())
-        .unwrap();
+    let response = client.request("cleanup", &input).unwrap();
 
     assert_eq!(response.text.as_deref(), Some("warm"));
 }

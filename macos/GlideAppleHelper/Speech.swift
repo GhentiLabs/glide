@@ -139,15 +139,6 @@ extension GlideAppleHelper {
         return try await runtime.transcribe(request)
     }
 
-    static func transcribeProfiled(_ request: TranscribeRequest) async throws -> (text: String, timings: [HelperTiming]) {
-        guard #available(macOS 26.0, *) else {
-            throw HelperError("Apple Speech locale models require macOS 26 or newer")
-        }
-
-        let runtime = Runtime()
-        return try await runtime.transcribeProfiled(request)
-    }
-
     static func speechAvailability() -> (available: Bool, reason: String) {
         guard #available(macOS 26.0, *) else {
             return (false, "requires macOS 26 or newer")
@@ -287,20 +278,6 @@ extension Runtime {
             resultTask.cancel()
             throw error
         }
-    }
-
-    func transcribeProfiled(_ request: TranscribeRequest) async throws -> (text: String, timings: [HelperTiming]) {
-        let started = Date()
-        let text = try await transcribe(request)
-        return (
-            text,
-            [
-                HelperTiming(
-                    phase: "swift_transcribe_total",
-                    durationMs: Date().timeIntervalSince(started) * 1000
-                )
-            ]
-        )
     }
 
     private func preparedSpeechLocale(for modelId: String) async throws -> Locale {

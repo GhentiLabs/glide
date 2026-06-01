@@ -58,22 +58,12 @@ struct GlideAppleHelper {
                 await serve()
             case "transcribe":
                 let request: TranscribeRequest = try readStdinJSON()
-                if request.profile == true {
-                    let result = try await transcribeProfiled(request)
-                    printResponse(HelperResponse(ok: true, text: result.text, timings: result.timings))
-                } else {
-                    let text = try await transcribe(request)
-                    printResponse(HelperResponse(ok: true, text: text))
-                }
+                let text = try await transcribe(request)
+                printResponse(HelperResponse(ok: true, text: text))
             case "cleanup":
                 let request: CleanupRequest = try readStdinJSON()
-                if request.profile == true {
-                    let result = try await cleanupProfiled(request)
-                    printResponse(HelperResponse(ok: true, text: result.text, timings: result.timings))
-                } else {
-                    let text = try await cleanup(request)
-                    printResponse(HelperResponse(ok: true, text: text))
-                }
+                let text = try await cleanup(request)
+                printResponse(HelperResponse(ok: true, text: text))
             case "prewarm-foundation":
                 let request: CleanupRequest = try readStdinJSON()
                 try await prewarmFoundation(request)

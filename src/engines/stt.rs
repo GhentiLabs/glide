@@ -8,7 +8,6 @@ use anyhow::Result;
 use crate::{
     audio::AudioFormat,
     config::{Provider, ProvidersConfig},
-    profile::ProfileCollector,
 };
 
 mod apple;
@@ -22,28 +21,25 @@ pub trait SttProvider: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-pub(crate) fn build_profiled_provider(
+pub(crate) fn build_provider(
     provider: Provider,
     model: &str,
     providers: &ProvidersConfig,
     vocabulary: &[String],
-    profile: ProfileCollector,
 ) -> Result<Box<dyn SttProvider>> {
     match provider {
         // OpenAI, Groq, and Fireworks use OpenAI-style multipart transcription APIs.
         Provider::OpenAi | Provider::Groq | Provider::Fireworks => Ok(Box::new(
-            openai::OpenAiSttProvider::new(provider, model, providers, vocabulary, profile)?,
+            openai::OpenAiSttProvider::new(provider, model, providers, vocabulary)?,
         )),
         Provider::ElevenLabs => Ok(Box::new(elevenlabs::ElevenLabsSttProvider::new(
-            model, providers, profile,
+            model, providers,
         )?)),
         Provider::Cerebras => {
             anyhow::bail!("Cerebras does not provide a speech-to-text model")
         }
-        Provider::AppleLocal => Ok(Box::new(apple::AppleSpeechProvider::new(model, profile)?)),
-        Provider::Parakeet => Ok(Box::new(parakeet::ParakeetSttProvider::new(
-            model, profile,
-        )?)),
+        Provider::AppleLocal => Ok(Box::new(apple::AppleSpeechProvider::new(model)?)),
+        Provider::Parakeet => Ok(Box::new(parakeet::ParakeetSttProvider::new(model)?)),
     }
 }
 

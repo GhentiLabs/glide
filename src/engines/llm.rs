@@ -5,10 +5,7 @@
 
 use anyhow::Result;
 
-use crate::{
-    config::{Provider, ProvidersConfig},
-    profile::ProfileCollector,
-};
+use crate::config::{Provider, ProvidersConfig};
 
 mod apple;
 mod openai;
@@ -19,13 +16,12 @@ pub trait LlmProvider: Send + Sync {
     async fn clean(&self, raw_text: &str) -> Result<String>;
     fn name(&self) -> &'static str;
 }
-pub(crate) fn build_profiled_provider(
+pub(crate) fn build_provider(
     provider: Provider,
     model: &str,
     prompt_template: &str,
     style_prompt: Option<&str>,
     providers: &ProvidersConfig,
-    profile: ProfileCollector,
 ) -> Result<Box<dyn LlmProvider>> {
     let system_prompt = build_cleanup_system_prompt(prompt_template, style_prompt);
     match provider {
@@ -36,13 +32,11 @@ pub(crate) fn build_profiled_provider(
                 model,
                 &system_prompt,
                 providers,
-                profile,
             )?))
         }
         Provider::AppleLocal => Ok(Box::new(apple::AppleFoundationLlmProvider::new(
             model,
             &system_prompt,
-            profile,
         ))),
         Provider::ElevenLabs => {
             anyhow::bail!("ElevenLabs does not provide an LLM cleanup model")

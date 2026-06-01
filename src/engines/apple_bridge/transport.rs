@@ -4,12 +4,9 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-    time::Instant,
 };
 
 use anyhow::{Context, Result};
-
-use crate::profile::ProfileCollector;
 
 use super::types::{HelperResponse, PersistentHelperRequest};
 
@@ -53,25 +50,18 @@ impl PersistentHelperClient {
         }
     }
 
-    pub(super) fn request(
-        &mut self,
-        command: &str,
-        input: &[u8],
-        profile: &ProfileCollector,
-    ) -> Result<HelperResponse> {
+    pub(super) fn request(&mut self, command: &str, input: &[u8]) -> Result<HelperResponse> {
         let request = persistent_request_json(command, input)?;
         for attempt in 0..=1 {
             if self.server.is_none() {
-                profile.measure_result("apple_bridge_server_start", || self.start_server())?;
-            } else {
-                profile.record("apple_bridge_server_reuse", std::time::Duration::ZERO);
+                self.start_server()?;
             }
 
             let result = self
                 .server
                 .as_mut()
                 .context("Apple persistent helper server was unavailable")?
-                .send(command, &request, profile);
+                .send(command, &request);
 
             match result {
                 Ok(response) => return Ok(response),
@@ -132,34 +122,7 @@ impl PersistentHelperClient {
 }
 
 impl PersistentHelperServer {
-    fn send(
-        &mut self,
-        command: &str,
-        request: &[u8],
-        profile: &ProfileCollector,
-    ) -> Result<HelperResponse> {
-        let round_trip_started = Instant::now();
-        match command {
-            "transcribe" => {
-                profile.record_since_marker("stt_start", "stt_start_to_stt_helper_request_start");
-                profile.record_since_marker(
-                    "flow_release",
-                    "flow_release_to_stt_helper_request_start",
-                );
-            }
-            "cleanup" => {
-                profile.record_since_marker("llm_start", "llm_start_to_llm_helper_request_start");
-                profile.record_since_marker(
-                    "flow_release",
-                    "flow_release_to_llm_helper_request_start",
-                );
-                profile.record_since_marker(
-                    "flow_stt_result",
-                    "flow_stt_result_to_llm_helper_request_start",
-                );
-            }
-            _ => {}
-        }
+    fn send(&mut self, command: &str, request: &[u8]) -> Result<HelperResponse> {
         self.stdin
             .write_all(request)
             .map_err(|error| persistent_transport_error("write request", error))?;
@@ -181,7 +144,6 @@ impl PersistentHelperServer {
             );
         }
 
-        profile.record("apple_bridge_round_trip", round_trip_started.elapsed());
         decode_persistent_response(command, line.trim())
     }
 }

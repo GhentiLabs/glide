@@ -6,7 +6,6 @@ let appleFoundationDefaultModelId = "apple-foundation-default"
 struct HelperResponse: Encodable {
     var ok: Bool
     var text: String?
-    var timings: [HelperTiming]? = nil
     var speechModels: [AppleSpeechModelResponse]?
     var appleSpeechAvailable: Bool?
     var appleSpeechReason: String?
@@ -14,11 +13,6 @@ struct HelperResponse: Encodable {
     var foundationModelsAvailable: Bool?
     var foundationModelsReason: String?
     var error: String?
-}
-
-struct HelperTiming: Encodable {
-    var phase: String
-    var durationMs: Double
 }
 
 struct AppleSpeechModelResponse: Encodable {
@@ -57,7 +51,6 @@ struct AppleSpeechInstallEvent: Encodable {
 struct TranscribeRequest: Decodable {
     var audioPath: String
     var modelId: String?
-    var profile: Bool?
 }
 
 struct SpeechModelRequest: Decodable {
@@ -68,7 +61,6 @@ struct CleanupRequest: Decodable {
     var modelId: String?
     var systemPrompt: String
     var userPrompt: String
-    var profile: Bool?
 }
 
 struct HelperError: LocalizedError {
