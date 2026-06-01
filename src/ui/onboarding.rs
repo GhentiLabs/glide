@@ -7,13 +7,10 @@ use gpui_component::Disableable;
 use gpui_component::Sizable;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
+use strum::VariantArray as _;
 
-use crate::config::HotkeyTrigger;
-use crate::permissions;
-
-// ---------------------------------------------------------------------------
-// OS-dependent hotkey presets
-// ---------------------------------------------------------------------------
+use crate::config::{ColorAccent, HotkeyTrigger};
+use crate::platform::permissions;
 
 #[cfg(target_os = "macos")]
 fn hotkey_presets() -> [(HotkeyTrigger, &'static str); 4] {
@@ -27,37 +24,6 @@ fn hotkey_presets() -> [(HotkeyTrigger, &'static str); 4] {
         (HotkeyTrigger::Custom(63), "Fn"),
         (HotkeyTrigger::F8, "F8"),
     ]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn status(name: &'static str, granted: bool) -> permissions::PermissionStatus {
-        permissions::PermissionStatus {
-            name,
-            description: "",
-            granted,
-            settings_url: "",
-            icon: "",
-        }
-    }
-
-    #[test]
-    fn test_permission_state_from_statuses() {
-        let statuses = vec![
-            status("Microphone", true),
-            status("Accessibility", false),
-            status("Input Monitoring", true),
-        ];
-
-        let state = PermissionState::from_statuses(&statuses);
-
-        assert!(state.microphone);
-        assert!(!state.accessibility);
-        assert!(state.input_monitoring);
-        assert!(!state.all_granted());
-    }
 }
 
 #[cfg(target_os = "windows")]
@@ -102,57 +68,34 @@ fn hotkey_hint_text() -> &'static str {
      because it\u{2019}s rarely used by other apps."
 }
 
-// ---------------------------------------------------------------------------
-// Step enum
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::VariantArray)]
 pub(super) enum OnboardingStep {
     Welcome,
+    Theme,
     Permissions,
     Hotkey,
     HowItWorks,
 }
 
 impl OnboardingStep {
-    const ALL: [Self; 4] = [
-        Self::Welcome,
-        Self::Permissions,
-        Self::Hotkey,
-        Self::HowItWorks,
-    ];
-
     fn index(self) -> usize {
-        match self {
-            Self::Welcome => 0,
-            Self::Permissions => 1,
-            Self::Hotkey => 2,
-            Self::HowItWorks => 3,
-        }
+        Self::VARIANTS
+            .iter()
+            .position(|step| *step == self)
+            .expect("onboarding step")
     }
 
     fn next(self) -> Option<Self> {
-        match self {
-            Self::Welcome => Some(Self::Permissions),
-            Self::Permissions => Some(Self::Hotkey),
-            Self::Hotkey => Some(Self::HowItWorks),
-            Self::HowItWorks => None,
-        }
+        Self::VARIANTS.get(self.index() + 1).copied()
     }
 
     fn prev(self) -> Option<Self> {
-        match self {
-            Self::Welcome => None,
-            Self::Permissions => Some(Self::Welcome),
-            Self::Hotkey => Some(Self::Permissions),
-            Self::HowItWorks => Some(Self::Hotkey),
-        }
+        self.index()
+            .checked_sub(1)
+            .and_then(|index| Self::VARIANTS.get(index))
+            .copied()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Permission state
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PermissionState {
@@ -183,17 +126,9 @@ fn permission_granted(statuses: &[permissions::PermissionStatus], name: &str) ->
         .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// Onboarding methods on SettingsApp
-// ---------------------------------------------------------------------------
-
-use super::SettingsApp;
+use super::{SettingsApp, apply_theme_preference};
 
 impl SettingsApp {
-    // -------------------------------------------------------------------
-    // Navigation
-    // -------------------------------------------------------------------
-
     fn onboarding_can_advance(&self) -> bool {
         match self.onboarding_step {
             OnboardingStep::Hotkey => self.onboarding_selected_trigger.is_some(),
@@ -203,7 +138,6 @@ impl SettingsApp {
 
     fn onboarding_advance(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) {
         if let Some(next) = self.onboarding_step.next() {
-            // Save hotkey when leaving the hotkey step
             if self.onboarding_step == OnboardingStep::Hotkey
                 && let Some(trigger) = self.onboarding_selected_trigger
             {
@@ -236,10 +170,6 @@ impl SettingsApp {
         cx.notify();
     }
 
-    // -------------------------------------------------------------------
-    // Main overlay render
-    // -------------------------------------------------------------------
-
     pub(super) fn render_onboarding_overlay(
         &mut self,
         window: &mut Window,
@@ -265,6 +195,9 @@ impl SettingsApp {
                         OnboardingStep::Welcome => {
                             self.render_ob_welcome(window, cx).into_any_element()
                         }
+                        OnboardingStep::Theme => {
+                            self.render_ob_theme(window, cx).into_any_element()
+                        }
                         OnboardingStep::Permissions => {
                             self.render_ob_permissions(window, cx).into_any_element()
                         }
@@ -279,18 +212,13 @@ impl SettingsApp {
             .child(self.render_ob_footer(window, cx))
     }
 
-    // -------------------------------------------------------------------
-    // Step renderers
-    // -------------------------------------------------------------------
-
     fn render_ob_welcome(
         &self,
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let accent = self.shared.snapshot().config.app.accent;
-        let icon_path = crate::platform::accent_icon_path(accent)
-            .unwrap_or_else(|| crate::config::asset_path("assets/icons/logo.svg"));
+        let icon_path = crate::config::asset_path(accent.icon_asset());
 
         div()
             .flex()
@@ -318,6 +246,112 @@ impl SettingsApp {
             )
     }
 
+    fn render_ob_theme(
+        &self,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let snapshot = self.shared.snapshot();
+        let current_accent = snapshot.config.app.accent;
+        let preview_icon = crate::config::asset_path(current_accent.icon_asset());
+
+        let mut options = div()
+            .flex()
+            .flex_wrap()
+            .justify_center()
+            .gap(px(12.0))
+            .w_full()
+            .max_w(px(520.0));
+
+        for accent in ColorAccent::VARIANTS.iter().copied() {
+            let is_selected = accent == current_accent;
+            let icon_path = crate::config::asset_path(accent.icon_asset());
+            let (h, s, l, a) = accent.primary_hsla();
+            let swatch = gpui::hsla(h, s, l, a);
+
+            options = options.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "theme-color-{}",
+                        accent.label()
+                    )))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(8.0))
+                    .w(px(112.0))
+                    .h(px(128.0))
+                    .rounded_lg()
+                    .border_2()
+                    .cursor_pointer()
+                    .when(is_selected, |d| {
+                        d.border_color(cx.theme().primary)
+                            .bg(cx.theme().primary.opacity(0.08))
+                    })
+                    .when(!is_selected, |d| {
+                        d.border_color(cx.theme().border).bg(cx.theme().muted)
+                    })
+                    .child(
+                        div()
+                            .relative()
+                            .child(img(icon_path).w(px(56.0)).h(px(56.0)))
+                            .child(
+                                div()
+                                    .absolute()
+                                    .right(px(-4.0))
+                                    .bottom(px(-4.0))
+                                    .w(px(18.0))
+                                    .h(px(18.0))
+                                    .rounded_full()
+                                    .border_2()
+                                    .border_color(cx.theme().background)
+                                    .bg(swatch),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(cx.theme().foreground)
+                            .child(accent.label()),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let pref = this.shared.snapshot().config.app.theme;
+                        let _ = this.shared.update_config(|config| {
+                            config.app.accent = accent;
+                        });
+                        apply_theme_preference(pref, accent, Some(window), cx);
+                        cx.notify();
+                    })),
+            );
+        }
+
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(18.0))
+            .max_w(px(560.0))
+            .child(img(preview_icon).w(px(76.0)).h(px(76.0)))
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(cx.theme().foreground)
+                    .child("Choose Your Theme Color"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .text_center()
+                    .max_w(px(420.0))
+                    .child("Pick the Glide icon and accent color you want to use."),
+            )
+            .child(options)
+    }
+
     fn render_ob_permissions(
         &self,
         _window: &mut Window,
@@ -328,21 +362,21 @@ impl SettingsApp {
                 "Microphone",
                 "Capture audio for dictation",
                 self.onboarding_perm_state.microphone,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+                permissions::MICROPHONE_SETTINGS_URL,
                 IconName::Bell,
             ),
             (
                 "Accessibility",
                 "Paste transcribed text",
                 self.onboarding_perm_state.accessibility,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                permissions::ACCESSIBILITY_SETTINGS_URL,
                 IconName::User,
             ),
             (
                 "Input Monitoring",
                 "Global hotkey detection",
                 self.onboarding_perm_state.input_monitoring,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                permissions::INPUT_MONITORING_SETTINGS_URL,
                 IconName::Eye,
             ),
         ];
@@ -383,14 +417,26 @@ impl SettingsApp {
                     .into_any_element()
             } else {
                 let url_owned = url.to_string();
+                let is_accessibility = *name == "Accessibility";
                 Button::new(SharedString::from(format!("open-{name}")))
-                    .label("Open Settings")
+                    .label(if is_accessibility {
+                        "Request Access"
+                    } else {
+                        "Open Settings"
+                    })
                     .small()
                     .compact()
                     .primary()
-                    .on_click(move |_, _, _cx| {
-                        let _ = std::process::Command::new("open").arg(&url_owned).spawn();
-                    })
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        if is_accessibility {
+                            permissions::request_accessibility_access_or_open_settings();
+                        } else {
+                            let _ = std::process::Command::new("open").arg(&url_owned).spawn();
+                        }
+                        if this.refresh_permissions() {
+                            cx.notify();
+                        }
+                    }))
                     .into_any_element()
             };
 
@@ -450,7 +496,7 @@ impl SettingsApp {
                     .max_w(px(400.0))
                     .child(
                         "Glide needs these macOS permissions to work. \
-                         Click each to open System Settings.",
+                         Use each row to grant access or open System Settings.",
                     ),
             )
             .child(card);
@@ -472,7 +518,6 @@ impl SettingsApp {
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
-        // Poll for recorded keycode if recording
         if self.onboarding_recording_custom
             && let Some(code) = self.shared.poll_recorded_keycode()
         {
@@ -531,7 +576,6 @@ impl SettingsApp {
             );
         }
 
-        // Custom key recording
         let is_custom = matches!(
             self.onboarding_selected_trigger,
             Some(HotkeyTrigger::Custom(_))
@@ -599,7 +643,6 @@ impl SettingsApp {
                         this.shared.start_hotkey_recording();
                         this.onboarding_recording_custom = true;
                         cx.notify();
-                        // Poll for recorded keycode
                         cx.spawn(async move |view, cx| {
                             loop {
                                 cx.background_executor()
@@ -718,10 +761,6 @@ impl SettingsApp {
             .child(flow)
     }
 
-    // -------------------------------------------------------------------
-    // Footer with progress dots and navigation
-    // -------------------------------------------------------------------
-
     fn render_ob_footer(
         &self,
         _window: &mut Window,
@@ -731,9 +770,8 @@ impl SettingsApp {
         let is_last = self.onboarding_step == OnboardingStep::HowItWorks;
         let can_continue = self.onboarding_can_advance();
 
-        // Progress dots
         let mut dots = div().flex().gap(px(8.0)).items_center();
-        for i in 0..OnboardingStep::ALL.len() {
+        for i in 0..OnboardingStep::VARIANTS.len() {
             let is_current = i == step_idx;
             let is_past = i < step_idx;
             dots = dots.child(
@@ -751,7 +789,6 @@ impl SettingsApp {
 
         let next_label = if is_last { "Get Started" } else { "Continue" };
 
-        // Back button
         let back = if step_idx > 0 {
             Button::new("onboarding-back")
                 .label("Back")
@@ -794,5 +831,36 @@ impl SettingsApp {
                     btn.primary()
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(name: &'static str, granted: bool) -> permissions::PermissionStatus {
+        permissions::PermissionStatus {
+            name,
+            description: "",
+            granted,
+            settings_url: "",
+            icon: "",
+        }
+    }
+
+    #[test]
+    fn test_permission_state_from_statuses() {
+        let statuses = vec![
+            status("Microphone", true),
+            status("Accessibility", false),
+            status("Input Monitoring", true),
+        ];
+
+        let state = PermissionState::from_statuses(&statuses);
+
+        assert!(state.microphone);
+        assert!(!state.accessibility);
+        assert!(state.input_monitoring);
+        assert!(!state.all_granted());
     }
 }

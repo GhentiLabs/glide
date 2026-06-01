@@ -111,18 +111,6 @@ bench-flow-short runs="3" warmups="1":
 bench-flow-long runs="3" warmups="1":
     cargo run --bin glide-bench -- flow --audio "{{ROOT}}/fixtures/benchmark/dictation-long.wav" --runs "{{runs}}" --warmups "{{warmups}}" --no-paste
 
-# Build and run the signed debug app in the foreground with real dictation JSONL tracing enabled.
-profile-app-trace output="target/glide-bench/app-trace.jsonl":
-    mkdir -p "{{ROOT}}/target/glide-bench"
-    {{ROOT}}/bundle.sh --debug --sign
-    GLIDE_TRACE=1 GLIDE_TRACE_PATH="{{output}}" "{{ROOT}}/target/debug/Glide.app/Contents/MacOS/Glide"
-
-# Run the signed debug app under Apple's Time Profiler and also emit Glide JSONL trace spans.
-profile-app-xctrace duration="30s" output_dir="target/glide-bench":
-    mkdir -p "{{output_dir}}"
-    {{ROOT}}/bundle.sh --debug --sign
-    xcrun xctrace record --template "Time Profiler" --time-limit "{{duration}}" --output "{{output_dir}}" --env GLIDE_TRACE=1 --env GLIDE_TRACE_PATH="{{output_dir}}/app-xctrace.jsonl" --launch -- "{{ROOT}}/target/debug/Glide.app/Contents/MacOS/Glide"
-
 # Benchmark an STT provider with the short recorded fixture.
 bench-stt-short provider="parakeet" model="parakeet-tdt-0.6b-v3-int8" runs="3" warmups="1":
     cargo run --bin glide-bench -- stt --audio "{{ROOT}}/fixtures/benchmark/dictation-short.wav" --provider "{{provider}}" --model "{{model}}" --runs "{{runs}}" --warmups "{{warmups}}"

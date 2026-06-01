@@ -16,11 +16,9 @@ impl SettingsApp {
     ) -> impl IntoElement {
         let snapshot = self.shared.snapshot();
         let mut container = div().flex().flex_col().gap_4();
-
-        // -- Vocabulary Section --
         let mut vocab_card = settings_card(cx)
             .child(hint_row(
-                "Words and phrases that help the transcription model recognize specific terms, names, and acronyms.",
+                "Words and phrases that help supported transcription providers recognize specific terms, names, and acronyms.",
                 cx,
             ))
             .gap_2();
@@ -108,8 +106,6 @@ impl SettingsApp {
         );
 
         container = container.child(section_block("Vocabulary", cx).child(vocab_card));
-
-        // -- Replacements Section --
         let mut repl_card = settings_card(cx)
             .child(hint_row(
                 "Auto-replace rules applied after transcription.",

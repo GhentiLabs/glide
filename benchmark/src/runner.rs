@@ -2,24 +2,22 @@ use std::{
     fs,
     io::Cursor,
     path::{Path, PathBuf},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
 
 use glide::benchmark_support::{
-    self as glide_core, AudioFormat, CleanupContext, GlideConfig, ModelSelection, ProfileCollector,
-    RecordedAudio, ReplacementRule,
+    self as glide_core, AudioFormat, GlideConfig, ModelSelection, RecordedAudio, ReplacementRule,
 };
 
 use super::{
-    SpanRecord,
     report::{
         build_report, provider_base_url_host, provider_metadata, summarize_text, write_report,
     },
     types::{
-        AudioMetadata, BenchmarkReport, BenchmarkRun, FlowBenchOptions, LlmBenchOptions,
-        ProviderModelMetadata, ScenarioMetadata, SttBenchOptions, TextSummary,
+        AudioMetadata, BenchmarkPhase, BenchmarkReport, BenchmarkRun, FlowBenchOptions,
+        LlmBenchOptions, ProviderModelMetadata, ScenarioMetadata, SttBenchOptions, TextSummary,
     },
 };
 
@@ -131,22 +129,15 @@ fn run_stt_once(
     audio: &BenchmarkAudio,
     runtime: &tokio::runtime::Runtime,
 ) -> BenchmarkRun {
-    let collector = ProfileCollector::enabled();
-    collector.mark("stt_start");
+    let mut timings = RunTimings::default();
     let mut error_phase = None;
     let result = (|| -> Result<TextSummary> {
-        let vocab_prompt = if config.dictionary.vocabulary.is_empty() {
-            None
-        } else {
-            Some(config.dictionary.vocabulary.join(", "))
-        };
-        let provider = collector.measure_result("stt_provider_build", || {
-            glide_core::build_profiled_stt_provider(
+        let provider = timings.measure_result("stt_provider_build", || {
+            glide_core::build_stt_provider(
                 options.provider,
                 &options.model,
                 &config.providers,
-                vocab_prompt,
-                collector.clone(),
+                &config.dictionary.vocabulary,
             )
         });
         let provider = match provider {
@@ -160,7 +151,7 @@ fn run_stt_once(
         let started = Instant::now();
         let transcript =
             runtime.block_on(provider.transcribe(&audio.recorded.bytes, audio.recorded.format));
-        collector.record("stt_call_total", started.elapsed());
+        timings.record("stt_call_total", started.elapsed());
         let transcript = match transcript {
             Ok(transcript) => transcript,
             Err(error) => {
@@ -176,7 +167,7 @@ fn run_stt_once(
         warmup,
         result,
         error_phase,
-        collector.spans(),
+        timings.phases,
         vec![provider_metadata(
             "stt",
             options.provider,
@@ -194,17 +185,15 @@ fn run_llm_once(
     text: &str,
     runtime: &tokio::runtime::Runtime,
 ) -> BenchmarkRun {
-    let collector = ProfileCollector::enabled();
-    collector.mark("llm_start");
+    let mut timings = RunTimings::default();
     let mut error_phase = None;
     let result = (|| -> Result<TextSummary> {
-        let provider = collector.measure_result("llm_provider_build", || {
-            glide_core::build_profiled_llm_provider(
+        let provider = timings.measure_result("llm_provider_build", || {
+            glide_core::build_llm_provider(
                 options.provider,
                 &options.model,
                 &config.dictation.system_prompt,
                 &config.providers,
-                collector.clone(),
             )
         });
         let provider = match provider {
@@ -216,8 +205,8 @@ fn run_llm_once(
         };
 
         let started = Instant::now();
-        let cleaned = runtime.block_on(provider.clean(text, &CleanupContext::default()));
-        collector.record("llm_call_total", started.elapsed());
+        let cleaned = runtime.block_on(provider.clean(text));
+        timings.record("llm_call_total", started.elapsed());
         let cleaned = match cleaned {
             Ok(cleaned) => cleaned,
             Err(error) => {
@@ -233,7 +222,7 @@ fn run_llm_once(
         warmup,
         result,
         error_phase,
-        collector.spans(),
+        timings.phases,
         vec![provider_metadata(
             "llm",
             options.provider,
@@ -249,13 +238,12 @@ fn run_flow_once(
     options: &FlowBenchOptions,
     runtime: &tokio::runtime::Runtime,
 ) -> BenchmarkRun {
-    let collector = ProfileCollector::enabled();
-    collector.mark("flow_release");
+    let mut timings = RunTimings::default();
     let mut selections = Vec::new();
     let mut error_phase = None;
 
     let result = (|| -> Result<TextSummary> {
-        let audio = match collector
+        let audio = match timings
             .measure_result("flow_audio_fixture_load", || load_wav_audio(&options.audio))
         {
             Ok(audio) => audio,
@@ -265,7 +253,7 @@ fn run_flow_once(
             }
         };
 
-        let config = match collector.measure_result("flow_config_keychain_load", || {
+        let config = match timings.measure_result("flow_config_keychain_load", || {
             GlideConfig::load_or_create().context("failed to load Glide config")
         }) {
             Ok(config) => config,
@@ -275,7 +263,7 @@ fn run_flow_once(
             }
         };
 
-        let resolved = match collector.measure_result("flow_style_model_resolution", || {
+        let resolved = match timings.measure_result("flow_style_model_resolution", || {
             resolve_flow_models(&config, options)
         }) {
             Ok(resolved) => resolved,
@@ -300,18 +288,12 @@ fn run_flow_once(
             ));
         }
 
-        let vocab_prompt = if config.dictionary.vocabulary.is_empty() {
-            None
-        } else {
-            Some(config.dictionary.vocabulary.join(", "))
-        };
-        let stt_provider = match collector.measure_result("flow_stt_provider_build", || {
-            glide_core::build_profiled_stt_provider(
+        let stt_provider = match timings.measure_result("flow_stt_provider_build", || {
+            glide_core::build_stt_provider(
                 resolved.stt.provider,
                 &resolved.stt.model,
                 &config.providers,
-                vocab_prompt,
-                collector.clone(),
+                &config.dictionary.vocabulary,
             )
         }) {
             Ok(provider) => provider,
@@ -324,7 +306,7 @@ fn run_flow_once(
         let started = Instant::now();
         let raw_text =
             runtime.block_on(stt_provider.transcribe(&audio.recorded.bytes, audio.recorded.format));
-        collector.record("flow_stt_call", started.elapsed());
+        timings.record("flow_stt_call", started.elapsed());
         let raw_text = match raw_text {
             Ok(raw_text) => raw_text,
             Err(error) => {
@@ -332,20 +314,17 @@ fn run_flow_once(
                 return Err(error);
             }
         };
-        collector.mark("flow_stt_result");
-
-        let raw_text = collector.measure("flow_postprocess_replacements", || {
+        let raw_text = timings.measure("flow_postprocess_replacements", || {
             apply_replacements(&raw_text, &config.dictionary.replacements)
         });
 
         let cleaned_text = if let Some(llm_selection) = resolved.llm {
-            let llm_provider = match collector.measure_result("flow_llm_provider_build", || {
-                glide_core::build_profiled_llm_provider(
+            let llm_provider = match timings.measure_result("flow_llm_provider_build", || {
+                glide_core::build_llm_provider(
                     llm_selection.provider,
                     &llm_selection.model,
                     &resolved.system_prompt,
                     &config.providers,
-                    collector.clone(),
                 )
             }) {
                 Ok(provider) => provider,
@@ -356,14 +335,8 @@ fn run_flow_once(
             };
 
             let started = Instant::now();
-            let cleaned = runtime.block_on(llm_provider.clean(
-                &raw_text,
-                &CleanupContext {
-                    target_app: options.target_app.clone(),
-                    mode_hint: Some("general dictation".to_string()),
-                },
-            ));
-            collector.record("flow_llm_call", started.elapsed());
+            let cleaned = runtime.block_on(llm_provider.clean(&raw_text));
+            timings.record("flow_llm_call", started.elapsed());
             match cleaned {
                 Ok(cleaned) => cleaned,
                 Err(error) => {
@@ -375,12 +348,12 @@ fn run_flow_once(
             raw_text
         };
 
-        let cleaned_text = collector.measure("flow_postprocess_strip_think_tags", || {
+        let cleaned_text = timings.measure("flow_postprocess_strip_think_tags", || {
             glide_core::strip_think_tags(&cleaned_text)
         });
 
         if options.paste
-            && let Err(error) = collector.measure_result("flow_paste", || {
+            && let Err(error) = timings.measure_result("flow_paste", || {
                 glide_core::paste_text(&cleaned_text, &config.paste)
             })
         {
@@ -396,7 +369,7 @@ fn run_flow_once(
         warmup,
         result,
         error_phase,
-        collector.spans(),
+        timings.phases,
         selections,
     )
 }
@@ -447,7 +420,7 @@ fn build_run(
     warmup: bool,
     result: Result<TextSummary>,
     error_phase: Option<String>,
-    phases: Vec<SpanRecord>,
+    phases: Vec<BenchmarkPhase>,
     selections: Vec<ProviderModelMetadata>,
 ) -> BenchmarkRun {
     match result {
@@ -525,6 +498,35 @@ fn read_text_argument(value: &str) -> Result<String> {
 
     Ok(value.to_string())
 }
+
+#[derive(Default)]
+struct RunTimings {
+    phases: Vec<BenchmarkPhase>,
+}
+
+impl RunTimings {
+    fn record(&mut self, phase: impl Into<String>, duration: Duration) {
+        self.phases.push(BenchmarkPhase {
+            phase: phase.into(),
+            duration_ms: duration.as_secs_f64() * 1000.0,
+        });
+    }
+
+    fn measure<T>(&mut self, phase: &str, f: impl FnOnce() -> T) -> T {
+        let started = Instant::now();
+        let result = f();
+        self.record(phase, started.elapsed());
+        result
+    }
+
+    fn measure_result<T>(&mut self, phase: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        let started = Instant::now();
+        let result = f();
+        self.record(phase, started.elapsed());
+        result
+    }
+}
+
 fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
     let mut result = text.to_string();
     for rule in replacements {

@@ -7,8 +7,8 @@ use gpui_component::input::{Input, InputState};
 use gpui_component::popover::Popover;
 use gpui_component::{Icon, IconName};
 
+use crate::app::state::SharedState;
 use crate::config::{GlideConfig, ModelSelection, OverlayPosition, Provider};
-use crate::state::SharedState;
 
 pub(super) fn field_label(text: &str, cx: &App) -> gpui::Div {
     div()
@@ -178,7 +178,7 @@ pub(super) fn display_model_name(id: &str) -> &str {
     id.rsplit_once('/').map(|(_, name)| name).unwrap_or(id)
 }
 
-pub(super) fn model_display_name(model: &crate::model_catalog::ModelInfo) -> String {
+pub(super) fn model_display_name(model: &crate::engines::model_catalog::ModelInfo) -> String {
     if model.display_name.trim().is_empty() {
         display_model_name(&model.id).to_string()
     } else {
@@ -186,7 +186,10 @@ pub(super) fn model_display_name(model: &crate::model_catalog::ModelInfo) -> Str
     }
 }
 
-pub(super) fn model_label_for(id: &str, models: &[crate::model_catalog::ModelInfo]) -> String {
+pub(super) fn model_label_for(
+    id: &str,
+    models: &[crate::engines::model_catalog::ModelInfo],
+) -> String {
     models
         .iter()
         .find(|model| model.id == id)
@@ -195,7 +198,7 @@ pub(super) fn model_label_for(id: &str, models: &[crate::model_catalog::ModelInf
 }
 
 pub(super) fn model_picker_item(
-    model: &crate::model_catalog::ModelInfo,
+    model: &crate::engines::model_catalog::ModelInfo,
     recommended: bool,
     cx: &App,
 ) -> gpui::Stateful<gpui::Div> {
@@ -234,9 +237,9 @@ pub(super) fn model_picker_item(
 }
 
 fn filtered_models<'a>(
-    models: &'a [crate::model_catalog::ModelInfo],
+    models: &'a [crate::engines::model_catalog::ModelInfo],
     query: &str,
-) -> Vec<&'a crate::model_catalog::ModelInfo> {
+) -> Vec<&'a crate::engines::model_catalog::ModelInfo> {
     if query.is_empty() {
         return models.iter().collect();
     }
@@ -325,7 +328,7 @@ pub(super) fn disable_llm_rewrite(config: &mut GlideConfig) {
 pub(super) fn model_dropdown_button(
     id: &str,
     current_model: &str,
-    models: &[crate::model_catalog::ModelInfo],
+    models: &[crate::engines::model_catalog::ModelInfo],
     recommended_model: Option<&str>,
     action: Option<ModelDropdownAction>,
     shared: SharedState,
@@ -406,59 +409,12 @@ pub(super) fn model_dropdown_button(
     model_dropdown_wrapper(current_logo, popover)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn model(provider: &str, id: &str, display_name: &str) -> crate::model_catalog::ModelInfo {
-        crate::model_catalog::ModelInfo {
-            id: id.to_string(),
-            display_name: display_name.to_string(),
-            provider: provider.to_string(),
-            logo: String::new(),
-            installed: false,
-        }
-    }
-
-    #[test]
-    fn model_display_name_strips_only_known_provider_prefixes() {
-        let cases = [
-            (
-                "Fireworks",
-                "accounts/fireworks/models/gpt-oss-20b",
-                "accounts/fireworks/models/gpt-oss-20b",
-                "gpt-oss-20b",
-            ),
-            (
-                "Groq",
-                "openai/gpt-oss-120b",
-                "openai/gpt-oss-120b",
-                "gpt-oss-120b",
-            ),
-            (
-                "Groq",
-                "meta-llama/llama-4-scout-17b-16e-instruct",
-                "meta-llama/llama-4-scout-17b-16e-instruct",
-                "llama-4-scout-17b-16e-instruct",
-            ),
-            ("Other", "vendor/model", "vendor/model", "vendor/model"),
-        ];
-
-        for (provider, id, display_name, expected) in cases {
-            assert_eq!(
-                model_display_name(&model(provider, id, display_name)),
-                expected
-            );
-        }
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(super) fn style_model_dropdown(
     id: &str,
     current_display: &str,
     current_model_id: Option<&str>,
-    models: &[crate::model_catalog::ModelInfo],
+    models: &[crate::engines::model_catalog::ModelInfo],
     shared: SharedState,
     search_entity: Entity<InputState>,
     style_index: usize,
@@ -561,4 +517,55 @@ pub(super) fn style_model_dropdown(
         });
 
     model_dropdown_wrapper(current_logo, popover)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model(
+        provider: &str,
+        id: &str,
+        display_name: &str,
+    ) -> crate::engines::model_catalog::ModelInfo {
+        crate::engines::model_catalog::ModelInfo {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            provider: provider.to_string(),
+            logo: String::new(),
+            installed: false,
+        }
+    }
+
+    #[test]
+    fn model_display_name_strips_only_known_provider_prefixes() {
+        let cases = [
+            (
+                "Fireworks",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "accounts/fireworks/models/gpt-oss-20b",
+                "gpt-oss-20b",
+            ),
+            (
+                "Groq",
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-120b",
+                "gpt-oss-120b",
+            ),
+            (
+                "Groq",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-4-scout-17b-16e-instruct",
+            ),
+            ("Other", "vendor/model", "vendor/model", "vendor/model"),
+        ];
+
+        for (provider, id, display_name, expected) in cases {
+            assert_eq!(
+                model_display_name(&model(provider, id, display_name)),
+                expected
+            );
+        }
+    }
 }

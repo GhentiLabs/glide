@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use gpui::{AppContext, TestAppContext, VisualTestContext};
 
+use crate::app::state::SharedAppState;
 use crate::config::{GlideConfig, ModelSelection, Provider};
-use crate::state::SharedAppState;
 
 fn test_shared_state() -> SharedState {
     Arc::new(SharedAppState::new(GlideConfig::default()))
@@ -174,73 +174,6 @@ mod inputs_autosave {
 
         cx.read_entity(&view, |app, _| {
             assert!(!app.save_pending, "autosave should have completed");
-        });
-    }
-}
-
-mod styles {
-    use super::*;
-
-    #[gpui::test]
-    async fn add_style(cx: &mut TestAppContext) {
-        let (view, mut cx) = init_and_create_view(cx);
-        let initial_count = cx.read_entity(&view, |app, _| app.styles.len());
-
-        cx.update(|window, cx| {
-            view.update(cx, |app, cx| {
-                let entry = Style {
-                    name: "TestApp".to_string(),
-                    apps: vec![],
-                    prompt: "test prompt".to_string(),
-                    stt: None,
-                    llm: None,
-                };
-                let (inputs, subs) = SettingsApp::create_style_inputs(&entry, window, cx);
-                app.styles.push(inputs);
-                app._subscriptions.extend(subs);
-                cx.notify();
-            });
-        });
-
-        cx.read_entity(&view, |app, _| {
-            assert_eq!(app.styles.len(), initial_count + 1);
-        });
-    }
-
-    #[gpui::test]
-    async fn remove_style(cx: &mut TestAppContext) {
-        let (view, mut cx) = init_and_create_view(cx);
-        let initial_count = cx.read_entity(&view, |app, _| app.styles.len());
-
-        cx.update(|window, cx| {
-            view.update(cx, |app, cx| {
-                for name in ["Extra1", "Extra2"] {
-                    let entry = Style {
-                        name: name.to_string(),
-                        apps: vec![],
-                        prompt: "prompt".to_string(),
-                        stt: None,
-                        llm: None,
-                    };
-                    let (inputs, subs) = SettingsApp::create_style_inputs(&entry, window, cx);
-                    app.styles.push(inputs);
-                    app._subscriptions.extend(subs);
-                }
-                cx.notify();
-            });
-        });
-
-        cx.read_entity(&view, |app, _| {
-            assert_eq!(app.styles.len(), initial_count + 2);
-        });
-
-        cx.update_entity(&view, |app, cx| {
-            app.styles.remove(0);
-            cx.notify();
-        });
-
-        cx.read_entity(&view, |app, _| {
-            assert_eq!(app.styles.len(), initial_count + 1);
         });
     }
 }

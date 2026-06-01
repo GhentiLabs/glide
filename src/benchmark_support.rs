@@ -6,18 +6,16 @@ pub use crate::audio::{AudioFormat, RecordedAudio};
 pub use crate::config::{
     GlideConfig, ModelSelection, PasteConfig, Provider, ProvidersConfig, ReplacementRule,
 };
-pub use crate::llm::{CleanupContext, LlmProvider};
-pub use crate::profile::{ProfileCollector, SpanRecord};
-pub use crate::stt::SttProvider;
+pub use crate::engines::llm::LlmProvider;
+pub use crate::engines::stt::SttProvider;
 
-pub fn build_profiled_stt_provider(
+pub fn build_stt_provider(
     provider: Provider,
     model: &str,
     providers: &ProvidersConfig,
-    vocabulary_prompt: Option<String>,
-    profile: ProfileCollector,
+    vocabulary: &[String],
 ) -> Result<Box<dyn SttProvider>> {
-    crate::stt::build_profiled_provider(provider, model, providers, vocabulary_prompt, profile)
+    crate::engines::stt::build_provider(provider, model, providers, vocabulary)
 }
 
 pub fn build_llm_provider(
@@ -26,23 +24,13 @@ pub fn build_llm_provider(
     system_prompt: &str,
     providers: &ProvidersConfig,
 ) -> Result<Box<dyn LlmProvider>> {
-    crate::llm::build_provider(provider, model, system_prompt, providers)
-}
-
-pub fn build_profiled_llm_provider(
-    provider: Provider,
-    model: &str,
-    system_prompt: &str,
-    providers: &ProvidersConfig,
-    profile: ProfileCollector,
-) -> Result<Box<dyn LlmProvider>> {
-    crate::llm::build_profiled_provider(provider, model, system_prompt, providers, profile)
+    crate::engines::llm::build_provider(provider, model, system_prompt, None, providers)
 }
 
 pub fn strip_think_tags(text: &str) -> String {
-    crate::llm::strip_think_tags(text)
+    crate::engines::llm::strip_think_tags(text)
 }
 
 pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
-    crate::paste::paste_text(text, config)
+    crate::platform::paste::paste_text(text, config)
 }

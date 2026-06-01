@@ -21,20 +21,18 @@ impl SettingsApp {
     ) -> impl IntoElement {
         let available_apps = crate::platform::list_applications();
         let mut container = div().flex().flex_col().gap_4();
-
-        // -- Default Prompt & Models --
         let snapshot = self.shared.snapshot();
         let default_stt = snapshot.config.dictation.stt.model.clone();
         let default_llm_selection = snapshot.config.dictation.llm.as_ref();
         let default_llm = default_llm_selection
             .map(|s| s.model.clone())
             .unwrap_or_else(|| "Disabled".to_string());
-        let stt_models = crate::model_catalog::cached_stt_models();
-        let llm_models = crate::model_catalog::cached_llm_models();
+        let stt_models = crate::engines::model_catalog::cached_stt_models();
+        let llm_models = crate::engines::model_catalog::cached_llm_models();
 
         let shared_stt = self.shared.clone();
         let shared_llm = self.shared.clone();
-        let has_provider = crate::model_catalog::any_provider_verified();
+        let has_provider = crate::engines::model_catalog::any_provider_verified();
 
         let prompt_expanded = self.prompt_expanded;
         let default_prompt_entity = self.default_prompt.clone();
@@ -51,7 +49,7 @@ impl SettingsApp {
                     .text_color(cx.theme().muted_foreground)
                     .child(prompt_chevron),
             )
-            .child(field_label("System Prompt", cx))
+            .child(field_label("Prompt Template", cx))
             .on_click(cx.listener(|this, _, _window, cx| {
                 this.prompt_expanded = !this.prompt_expanded;
                 cx.notify();
@@ -60,10 +58,7 @@ impl SettingsApp {
         container = container.child(
             section_block("Defaults", cx).child(
                 settings_card(cx)
-                    .child(hint_row(
-                        "Used for all applications unless a style overrides it.",
-                        cx,
-                    ))
+                    .child(hint_row("Used for all applications.", cx))
                     .child(prompt_header)
                     .when(prompt_expanded, |this| {
                         this.child(Input::new(&default_prompt_entity))
@@ -82,9 +77,9 @@ impl SettingsApp {
                     })
                     .when(has_provider, |this| {
                         let recommended_stt =
-                            crate::model_catalog::smart_stt_default().map(|s| s.model);
+                            crate::engines::model_catalog::smart_stt_default().map(|s| s.model);
                         let recommended_llm =
-                            crate::model_catalog::smart_llm_default().map(|s| s.model);
+                            crate::engines::model_catalog::smart_llm_default().map(|s| s.model);
                         this.child(setting_row("Voice Model", "Speech-to-text", cx).child(
                             model_dropdown_button(
                                 "default-stt",
@@ -123,8 +118,6 @@ impl SettingsApp {
                     }),
             ),
         );
-
-        // -- Styles (accordion cards) --
         for (index, style) in self.styles.iter().enumerate() {
             let is_expanded = self.expanded_style == Some(index);
             let style_prompt_expanded = style.prompt_expanded;
@@ -395,7 +388,7 @@ impl SettingsApp {
                             .text_color(cx.theme().muted_foreground)
                             .child(style_prompt_chevron),
                     )
-                    .child(field_label("System Prompt", cx))
+                    .child(field_label("Style Prompt", cx))
                     .on_click(cx.listener(move |this, _, _window, cx| {
                         if let Some(style) = this.styles.get_mut(index) {
                             style.prompt_expanded = !style.prompt_expanded;
@@ -489,20 +482,17 @@ impl SettingsApp {
                     .when_some(body, |this, body| this.child(body)),
             );
         }
-
-        // -- Add Style button --
         container = container.child(
             div().child(
                 Button::new("add-style")
                     .label("+ Add Style")
                     .primary()
                     .on_click(cx.listener(|this, _, window, cx| {
-                        let default_prompt = this.default_prompt.read(cx).value().to_string();
                         let style_num = this.styles.len() + 1;
                         let entry = Style {
                             name: format!("Style {style_num}"),
                             apps: Vec::new(),
-                            prompt: default_prompt,
+                            prompt: String::new(),
                             stt: None,
                             llm: None,
                         };

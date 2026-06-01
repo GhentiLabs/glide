@@ -7,8 +7,10 @@ use gpui_component::Sizable;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName};
 
+use strum::VariantArray as _;
+
+use crate::app::state::AppSnapshot;
 use crate::config::{ColorAccent, HotkeyTrigger, OverlayStyle, ThemePreference};
-use crate::state::AppSnapshot;
 
 use super::super::helpers::*;
 use super::super::{SettingsApp, apply_theme_preference};
@@ -25,12 +27,10 @@ impl SettingsApp {
         let current_overlay = snapshot.config.overlay.style;
 
         let mut container = div().flex().flex_col().gap_4();
-
-        // -- Recording Window --
         let mut style_cards = div().flex().gap_3().flex_1();
         let is_macos = cfg!(target_os = "macos");
         let has_notch = crate::platform::notch_width().is_some();
-        for style in OverlayStyle::ALL {
+        for style in OverlayStyle::VARIANTS.iter().copied() {
             if style == OverlayStyle::Glow && !is_macos {
                 continue;
             }
@@ -97,7 +97,7 @@ impl SettingsApp {
                         ))
                         .child({
                             let mut pos_cards = div().flex().gap_3().flex_1();
-                            let positions: Vec<_> = crate::config::OverlayPosition::ALL
+                            let positions: Vec<_> = crate::config::OverlayPosition::VARIANTS
                                 .iter()
                                 .filter(|p| {
                                     **p != crate::config::OverlayPosition::Notch || has_notch
@@ -147,8 +147,6 @@ impl SettingsApp {
                     }),
             ),
         );
-
-        // -- Keyboard Shortcuts --
         let hotkey_label = current_trigger
             .map(|t| t.label())
             .unwrap_or_else(|| "Not Set".to_string());
@@ -303,15 +301,13 @@ impl SettingsApp {
                     ),
             ),
         );
-
-        // -- Appearance --
         container = container.child(
             section_block("Appearance", cx).child(
                 settings_card(cx)
                     .child(
                         setting_row("Appearance", "Switch between light and dark", cx).child({
                             let mut pills = div().flex().gap_1().flex_shrink_0();
-                            for pref in ThemePreference::ALL {
+                            for pref in ThemePreference::VARIANTS.iter().copied() {
                                 let is_active = pref == current_theme;
                                 pills = pills.child(
                                     Button::new(SharedString::from(format!(
@@ -345,7 +341,7 @@ impl SettingsApp {
                     .child(setting_row("Theme", "Choose your accent color", cx).child({
                         let current_accent = snapshot.config.app.accent;
                         let mut pills = div().flex().gap_1().flex_shrink_0();
-                        for accent in ColorAccent::ALL {
+                        for accent in ColorAccent::VARIANTS.iter().copied() {
                             let is_active = accent == current_accent;
                             pills =
                                 pills.child(
@@ -377,8 +373,6 @@ impl SettingsApp {
                     })),
             ),
         );
-
-        // -- Permissions --
         let perms = &self.permission_statuses;
         let mut perm_card = settings_card(cx);
         for (i, perm) in perms.iter().enumerate() {
@@ -393,6 +387,7 @@ impl SettingsApp {
             };
 
             let url = perm.settings_url;
+            let is_accessibility = perm.name == "Accessibility";
             let right_side = if perm.granted {
                 Icon::new(IconName::CircleCheck).size_4().into_any_element()
             } else {
@@ -403,12 +398,23 @@ impl SettingsApp {
                     .child(Icon::new(IconName::CircleX).size_4())
                     .child(
                         Button::new(SharedString::from(format!("open-{}", perm.name)))
-                            .label("Open Settings")
+                            .label(if is_accessibility {
+                                "Request Access"
+                            } else {
+                                "Open Settings"
+                            })
                             .small()
                             .compact()
                             .danger()
-                            .on_click(cx.listener(move |_this, _, _window, _cx| {
-                                let _ = std::process::Command::new("open").arg(url).spawn();
+                            .on_click(cx.listener(move |this, _, _window, cx| {
+                                if is_accessibility {
+                                    crate::platform::permissions::request_accessibility_access_or_open_settings();
+                                } else {
+                                    let _ = std::process::Command::new("open").arg(url).spawn();
+                                }
+                                if this.refresh_permissions() {
+                                    cx.notify();
+                                }
                             })),
                     )
                     .into_any_element()
