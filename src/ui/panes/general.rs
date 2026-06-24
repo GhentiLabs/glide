@@ -10,7 +10,7 @@ use gpui_component::{Icon, IconName};
 use strum::VariantArray as _;
 
 use crate::app::state::AppSnapshot;
-use crate::config::{ColorAccent, HotkeyTrigger, OverlayStyle, ThemePreference};
+use crate::config::{ColorAccent, GlowVariant, HotkeyTrigger, OverlayStyle, ThemePreference};
 
 use super::super::helpers::*;
 use super::super::{SettingsApp, apply_theme_preference};
@@ -84,6 +84,8 @@ impl SettingsApp {
 
         let current_position = snapshot.config.overlay.position;
         let show_position = current_overlay == OverlayStyle::Classic;
+        let show_glow_variant = current_overlay == OverlayStyle::Glow;
+        let current_glow_variant = snapshot.config.overlay.glow_variant;
         container = container.child(
             section_block("Recording Window", cx).child(
                 settings_card(cx)
@@ -143,6 +145,67 @@ impl SettingsApp {
                                 );
                             }
                             pos_cards
+                        })
+                    })
+                    .when(show_glow_variant, |card| {
+                        card.child(setting_row(
+                            "Glow Style",
+                            "Animation used for the notch glow",
+                            cx,
+                        ))
+                        .child({
+                            let mut variant_cards = div().flex().gap_3().flex_1();
+                            for variant in GlowVariant::VARIANTS.iter().copied() {
+                                let is_active = variant == current_glow_variant;
+                                let icon_text = match variant {
+                                    GlowVariant::Aura => "◎",
+                                    GlowVariant::Comet => "☄\u{FE0E}",
+                                };
+                                variant_cards = variant_cards.child(
+                                    div()
+                                        .id(SharedString::from(format!(
+                                            "glow-{}",
+                                            variant.label()
+                                        )))
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap_2()
+                                        .py_4()
+                                        .px_6()
+                                        .flex_1()
+                                        .rounded_lg()
+                                        .border_2()
+                                        .cursor_pointer()
+                                        .map(|d| {
+                                            if is_active {
+                                                d.border_color(cx.theme().primary)
+                                            } else {
+                                                d.border_color(cx.theme().border)
+                                            }
+                                        })
+                                        .bg(cx.theme().secondary)
+                                        .child(
+                                            div()
+                                                .text_lg()
+                                                .text_color(cx.theme().foreground)
+                                                .child(icon_text),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(variant.label()),
+                                        )
+                                        .on_click(cx.listener(move |this, _, _window, cx| {
+                                            let _ = this.shared.update_config(|config| {
+                                                config.overlay.glow_variant = variant;
+                                            });
+                                            cx.notify();
+                                        })),
+                                );
+                            }
+                            variant_cards
                         })
                     }),
             ),

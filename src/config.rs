@@ -16,7 +16,7 @@ pub use models::{
     DictationConfig, DictionaryConfig, ModelSelection, ReplacementRule, STYLE_PROMPT_PLACEHOLDER,
     Style,
 };
-pub use overlay::{OverlayConfig, OverlayPosition, OverlayStyle};
+pub use overlay::{GlowVariant, OverlayConfig, OverlayPosition, OverlayStyle};
 pub use paste::PasteConfig;
 pub use providers::{Provider, ProviderCredentials, ProvidersConfig};
 pub use storage::asset_path;

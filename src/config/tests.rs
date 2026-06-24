@@ -126,6 +126,10 @@ fn overlay_and_theme_labels_are_exact() {
     assert_eq!(OverlayStyle::Glow.label(), "Glow");
     assert_eq!(OverlayStyle::None.label(), "None");
 
+    assert_eq!(GlowVariant::Aura.label(), "Aura");
+    assert_eq!(GlowVariant::Comet.label(), "Comet");
+    assert_eq!(OverlayConfig::default().glow_variant, GlowVariant::Aura);
+
     let themes = [
         (ThemePreference::System, "System"),
         (ThemePreference::Light, "Light"),
