@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,6 +12,20 @@ use super::{GlideConfig, Provider};
 
 const KEYRING_SERVICE: &str = "glide";
 const KEYRING_ACCOUNT: &str = "provider-api-keys";
+
+/// In-memory mirror of the provider-keys payload the OS keychain is believed to
+/// hold this run. It lets [`save_provider_keys_to_keyring`] skip keychain access
+/// entirely when credentials are unchanged — otherwise every config save (theme,
+/// overlay style, …) would read or write the keychain and trigger an OS
+/// authorization prompt.
+static KEYRING_MIRROR: Mutex<KeyringMirror> = Mutex::new(KeyringMirror::Unknown);
+
+enum KeyringMirror {
+    /// Not yet synced with the keychain this run; the next save must hit it.
+    Unknown,
+    /// The keychain is known to hold exactly this payload (`None` = no credential).
+    Synced(Option<String>),
+}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct ProviderKeyringPayload {
@@ -69,27 +84,45 @@ fn insert_provider_key(keys: &mut BTreeMap<String, String>, provider: &str, key:
 }
 
 pub(super) fn load_provider_keys_from_keyring() -> BTreeMap<String, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    let keys = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .and_then(|e| e.get_password())
         .ok()
         .map(|raw| decode_provider_keys(&raw))
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // Canonical encoding so the equality check in `save` is exact.
+    *KEYRING_MIRROR.lock().expect("keyring mirror poisoned") =
+        KeyringMirror::Synced(encode_provider_keys(&keys));
+
+    keys
 }
 
 #[cfg(not(test))]
 pub(super) fn save_provider_keys_to_keyring(keys: &BTreeMap<String, String>) {
-    let Some(payload) = encode_provider_keys(keys) else {
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
-            let _ = entry.delete_credential();
-        }
+    let payload = encode_provider_keys(keys);
+
+    let mut mirror = KEYRING_MIRROR.lock().expect("keyring mirror poisoned");
+    if let KeyringMirror::Synced(current) = &*mirror
+        && *current == payload
+    {
+        return;
+    }
+
+    let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) else {
         return;
     };
-
-    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
-        let current = entry.get_password().unwrap_or_default();
-        if current != payload {
-            let _ = entry.set_password(&payload);
+    match payload {
+        Some(payload) => {
+            if entry.set_password(&payload).is_ok() {
+                *mirror = KeyringMirror::Synced(Some(payload));
+            }
         }
+        // Only mark the keychain empty once the credential is actually gone; on a
+        // genuine failure leave the mirror Unknown so the next save retries.
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => *mirror = KeyringMirror::Synced(None),
+            Err(_) => *mirror = KeyringMirror::Unknown,
+        },
     }
 }
 
