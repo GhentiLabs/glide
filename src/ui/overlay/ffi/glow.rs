@@ -9,9 +9,19 @@ pub(in crate::ui::overlay) struct NotchGlowState {
 unsafe impl Send for NotchGlowState {}
 unsafe impl Sync for NotchGlowState {}
 
-pub(in crate::ui::overlay) fn create_notch_glow_panel(
-    glow_rgb: Option<(f64, f64, f64)>,
-) -> Option<Arc<Mutex<NotchGlowState>>> {
+struct GlowShell {
+    panel: *mut c_void,
+    root_layer: *mut c_void,
+    x: f64,
+    y_final: f64,
+    panel_w: f64,
+    panel_h: f64,
+}
+
+/// Builds the transparent, click-through panel sized to the notch and parked
+/// just above the screen edge, ready for a caller to add glow layers and slide
+/// it in. Shared by the aura and comet styles.
+unsafe fn create_glow_shell() -> Option<GlowShell> {
     let (notch_w, notch_h) = crate::platform::notch_dimensions()
         .unwrap_or((NOTCH_WIDTH_FALLBACK as f64, NOTCH_HEIGHT_FALLBACK));
     let panel_w = notch_w + 2.0 * GLOW_PADDING;
@@ -22,8 +32,6 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_u64: MsgSendU64 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
         let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
         let msg_init_rect: MsgSendRectBoolBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
@@ -119,6 +127,76 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
             content_view,
         );
         objc_release(content_view);
+
+        Some(GlowShell {
+            panel,
+            root_layer,
+            x,
+            y_final,
+            panel_w,
+            panel_h,
+        })
+    }
+}
+
+/// Drops the parked glow panel down into place with a short ease-out slide.
+unsafe fn slide_glow_panel_in(shell: &GlowShell) {
+    unsafe {
+        let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
+        let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
+        let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
+
+        objc_msgSend(shell.panel, sel_registerName(c"orderFrontRegardless".as_ptr()));
+        let ns_anim = objc_getClass(c"NSAnimationContext".as_ptr());
+        objc_msgSend(ns_anim, sel_registerName(c"beginGrouping".as_ptr()));
+        let current_ctx = objc_msgSend(ns_anim, sel_registerName(c"currentContext".as_ptr()));
+        msg_f64(current_ctx, sel_registerName(c"setDuration:".as_ptr()), 0.2);
+        type MsgSend4F =
+            unsafe extern "C" fn(*mut c_void, *mut c_void, f32, f32, f32, f32) -> *mut c_void;
+        let msg_4f: MsgSend4F = std::mem::transmute(objc_msgSend as *const ());
+        let slide_timing = msg_4f(
+            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
+            sel_registerName(c"functionWithControlPoints::::".as_ptr()),
+            0.0,
+            0.0,
+            0.2,
+            1.0,
+        );
+        msg_ptr(
+            current_ctx,
+            sel_registerName(c"setTimingFunction:".as_ptr()),
+            slide_timing,
+        );
+        let animator = objc_msgSend(shell.panel, sel_registerName(c"animator".as_ptr()));
+        let final_rect = NSRect {
+            x: shell.x,
+            y: shell.y_final,
+            w: shell.panel_w,
+            h: shell.panel_h,
+        };
+        msg_set_rect(
+            animator,
+            sel_registerName(c"setFrame:display:".as_ptr()),
+            final_rect,
+            true,
+        );
+        objc_msgSend(ns_anim, sel_registerName(c"endGrouping".as_ptr()));
+    }
+}
+
+pub(in crate::ui::overlay) fn create_notch_glow_panel(
+    glow_rgb: Option<(f64, f64, f64)>,
+) -> Option<Arc<Mutex<NotchGlowState>>> {
+    unsafe {
+        let shell = create_glow_shell()?;
+        let panel = shell.panel;
+        let root_layer = shell.root_layer;
+        let panel_w = shell.panel_w;
+
+        let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
+        let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
+        let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
+        let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
 
         type MsgSendRGBA =
             unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64, f64, f64) -> *mut c_void;
@@ -682,42 +760,7 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         objc_release(flare_container);
         objc_release(aura_container);
 
-        objc_msgSend(panel, sel_registerName(c"orderFrontRegardless".as_ptr()));
-        let ns_anim = objc_getClass(c"NSAnimationContext".as_ptr());
-        objc_msgSend(ns_anim, sel_registerName(c"beginGrouping".as_ptr()));
-        let current_ctx = objc_msgSend(ns_anim, sel_registerName(c"currentContext".as_ptr()));
-        msg_f64(current_ctx, sel_registerName(c"setDuration:".as_ptr()), 0.2);
-        type MsgSend4F =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, f32, f32, f32, f32) -> *mut c_void;
-        let msg_4f: MsgSend4F = std::mem::transmute(objc_msgSend as *const ());
-        let slide_timing = msg_4f(
-            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
-            sel_registerName(c"functionWithControlPoints::::".as_ptr()),
-            0.0,
-            0.0,
-            0.2,
-            1.0,
-        );
-        msg_ptr(
-            current_ctx,
-            sel_registerName(c"setTimingFunction:".as_ptr()),
-            slide_timing,
-        );
-        let animator = objc_msgSend(panel, sel_registerName(c"animator".as_ptr()));
-        let final_rect = NSRect {
-            x,
-            y: y_final,
-            w: panel_w,
-            h: panel_h,
-        };
-        msg_set_rect(
-            animator,
-            sel_registerName(c"setFrame:display:".as_ptr()),
-            final_rect,
-            true,
-        );
-        objc_msgSend(ns_anim, sel_registerName(c"endGrouping".as_ptr()));
-
+        slide_glow_panel_in(&shell);
         Some(Arc::new(Mutex::new(NotchGlowState { panel })))
     }
 }
@@ -725,116 +768,20 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
 pub(in crate::ui::overlay) fn create_notch_comet_panel(
     glow_rgb: Option<(f64, f64, f64)>,
 ) -> Option<Arc<Mutex<NotchGlowState>>> {
-    let (notch_w, notch_h) = crate::platform::notch_dimensions()
-        .unwrap_or((NOTCH_WIDTH_FALLBACK as f64, NOTCH_HEIGHT_FALLBACK));
-    let panel_w = notch_w + 2.0 * GLOW_PADDING;
-    let panel_h = notch_h + GLOW_PADDING;
     let r = GLOW_CORNER_RADIUS;
     let (cr, cg, cb) = glow_rgb.unwrap_or((0.2, 0.5, 1.0));
 
     unsafe {
+        let shell = create_glow_shell()?;
+        let panel = shell.panel;
+        let root_layer = shell.root_layer;
+        let panel_w = shell.panel_w;
+        let panel_h = shell.panel_h;
+
         let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
         let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
-        let msg_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_u64: MsgSendU64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
-        let msg_init_rect: MsgSendRectBoolBool = std::mem::transmute(objc_msgSend as *const ());
-        let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
-
-        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
-        let main_screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
-        if main_screen.is_null() {
-            return None;
-        }
-        let screen_frame = msg_rect(main_screen, sel_registerName(c"frame".as_ptr()));
-
-        let x = (screen_frame.w - panel_w) / 2.0;
-        let y_final = screen_frame.y + screen_frame.h - panel_h;
-        let y_hidden = screen_frame.y + screen_frame.h;
-        let ns_panel_class = objc_getClass(c"NSPanel".as_ptr());
-        let panel = objc_msgSend(ns_panel_class, sel_registerName(c"alloc".as_ptr()));
-        let content_rect = NSRect {
-            x,
-            y: y_hidden,
-            w: panel_w,
-            h: panel_h,
-        };
-        let panel = msg_init_rect(
-            panel,
-            sel_registerName(c"initWithContentRect:styleMask:backing:defer:".as_ptr()),
-            content_rect,
-            128, // NSNonactivatingPanel
-            2,   // NSBackingStoreBuffered
-            false,
-        );
-        if panel.is_null() {
-            return None;
-        }
-
-        let clear_color = objc_msgSend(
-            objc_getClass(c"NSColor".as_ptr()),
-            sel_registerName(c"clearColor".as_ptr()),
-        );
-        msg_ptr(
-            panel,
-            sel_registerName(c"setBackgroundColor:".as_ptr()),
-            clear_color,
-        );
-        msg_bool(panel, sel_registerName(c"setOpaque:".as_ptr()), false);
-        msg_bool(panel, sel_registerName(c"setHasShadow:".as_ptr()), false);
-        msg_i64(panel, sel_registerName(c"setLevel:".as_ptr()), 1000);
-        msg_bool(
-            panel,
-            sel_registerName(c"setIgnoresMouseEvents:".as_ptr()),
-            true,
-        );
-        msg_u64(
-            panel,
-            sel_registerName(c"setCollectionBehavior:".as_ptr()),
-            1 << 0,
-        );
-        msg_bool(
-            panel,
-            sel_registerName(c"setHidesOnDeactivate:".as_ptr()),
-            false,
-        );
-
-        let ns_view_class = objc_getClass(c"NSView".as_ptr());
-        let content_view = objc_msgSend(ns_view_class, sel_registerName(c"alloc".as_ptr()));
-        let content_view = objc_msgSend(content_view, sel_registerName(c"init".as_ptr()));
-        let view_rect = NSRect {
-            x: 0.0,
-            y: 0.0,
-            w: panel_w,
-            h: panel_h,
-        };
-        msg_set_rect(
-            content_view,
-            sel_registerName(c"setFrame:".as_ptr()),
-            view_rect,
-            false,
-        );
-        msg_bool(
-            content_view,
-            sel_registerName(c"setWantsLayer:".as_ptr()),
-            true,
-        );
-        let root_layer = objc_msgSend(content_view, sel_registerName(c"layer".as_ptr()));
-        let clear_cg = objc_msgSend(clear_color, sel_registerName(c"CGColor".as_ptr()));
-        msg_ptr(
-            root_layer,
-            sel_registerName(c"setBackgroundColor:".as_ptr()),
-            clear_cg,
-        );
-
-        msg_ptr(
-            panel,
-            sel_registerName(c"setContentView:".as_ptr()),
-            content_view,
-        );
-        objc_release(content_view);
 
         // U-shaped path tracing the notch outline
         let left = GLOW_PADDING;
@@ -871,7 +818,6 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
 
         let shape_class = objc_getClass(c"CAShapeLayer".as_ptr());
 
-        // Static glow ring
         let glow_layer = objc_msgSend(shape_class, sel_registerName(c"new".as_ptr()));
         msg_ptr(glow_layer, sel_registerName(c"setPath:".as_ptr()), cg_path);
         msg_ptr(
@@ -917,7 +863,6 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         );
         objc_release(glow_layer);
 
-        // Gradient-masked comet: full stroke + sliding CAGradientLayer mask for smooth taper
         let ns_number = objc_getClass(c"NSNumber".as_ptr());
         let ca_anim_class = objc_getClass(c"CABasicAnimation".as_ptr());
         type MsgSendPtrPtr =
@@ -1072,52 +1017,12 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
             anim,
             nsstring_cstr(c"slide"),
         );
-        objc_release(grad); // retained by `comet` as its mask
-        objc_release(comet); // retained by `root_layer`
+        objc_release(grad);
+        objc_release(comet);
 
         CGPathRelease(cg_path);
 
-        // Slide-in animation
-        objc_msgSend(panel, sel_registerName(c"orderFrontRegardless".as_ptr()));
-
-        let ns_anim = objc_getClass(c"NSAnimationContext".as_ptr());
-        objc_msgSend(ns_anim, sel_registerName(c"beginGrouping".as_ptr()));
-        let current_ctx = objc_msgSend(ns_anim, sel_registerName(c"currentContext".as_ptr()));
-        msg_f64(current_ctx, sel_registerName(c"setDuration:".as_ptr()), 0.2);
-
-        type MsgSend4F =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, f32, f32, f32, f32) -> *mut c_void;
-        let msg_4f: MsgSend4F = std::mem::transmute(objc_msgSend as *const ());
-        let slide_timing = msg_4f(
-            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
-            sel_registerName(c"functionWithControlPoints::::".as_ptr()),
-            0.0,
-            0.0,
-            0.2,
-            1.0,
-        );
-        msg_ptr(
-            current_ctx,
-            sel_registerName(c"setTimingFunction:".as_ptr()),
-            slide_timing,
-        );
-
-        let animator = objc_msgSend(panel, sel_registerName(c"animator".as_ptr()));
-        let final_rect = NSRect {
-            x,
-            y: y_final,
-            w: panel_w,
-            h: panel_h,
-        };
-        msg_set_rect(
-            animator,
-            sel_registerName(c"setFrame:display:".as_ptr()),
-            final_rect,
-            true,
-        );
-
-        objc_msgSend(ns_anim, sel_registerName(c"endGrouping".as_ptr()));
-
+        slide_glow_panel_in(&shell);
         Some(Arc::new(Mutex::new(NotchGlowState { panel })))
     }
 }
