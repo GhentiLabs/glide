@@ -13,17 +13,12 @@ use super::{GlideConfig, Provider};
 const KEYRING_SERVICE: &str = "glide";
 const KEYRING_ACCOUNT: &str = "provider-api-keys";
 
-/// In-memory mirror of the provider-keys payload the OS keychain is believed to
-/// hold this run. It lets [`save_provider_keys_to_keyring`] skip keychain access
-/// entirely when credentials are unchanged — otherwise every config save (theme,
-/// overlay style, …) would read or write the keychain and trigger an OS
-/// authorization prompt.
+/// Mirror of the keychain's provider-keys payload, so `save` can skip keychain
+/// access (and its auth prompt) when the keys are unchanged.
 static KEYRING_MIRROR: Mutex<KeyringMirror> = Mutex::new(KeyringMirror::Unknown);
 
 enum KeyringMirror {
-    /// Not yet synced with the keychain this run; the next save must hit it.
     Unknown,
-    /// The keychain is known to hold exactly this payload (`None` = no credential).
     Synced(Option<String>),
 }
 
@@ -90,7 +85,6 @@ pub(super) fn load_provider_keys_from_keyring() -> BTreeMap<String, String> {
         .map(|raw| decode_provider_keys(&raw))
         .unwrap_or_default();
 
-    // Canonical encoding so the equality check in `save` is exact.
     *KEYRING_MIRROR.lock().expect("keyring mirror poisoned") =
         KeyringMirror::Synced(encode_provider_keys(&keys));
 
@@ -117,8 +111,6 @@ pub(super) fn save_provider_keys_to_keyring(keys: &BTreeMap<String, String>) {
                 *mirror = KeyringMirror::Synced(Some(payload));
             }
         }
-        // Only mark the keychain empty once the credential is actually gone; on a
-        // genuine failure leave the mirror Unknown so the next save retries.
         None => match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => *mirror = KeyringMirror::Synced(None),
             Err(_) => *mirror = KeyringMirror::Unknown,
