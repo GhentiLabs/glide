@@ -184,6 +184,107 @@ unsafe fn slide_glow_panel_in(shell: &GlowShell) {
     }
 }
 
+type MsgSendRGBA =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64, f64, f64) -> *mut c_void;
+type MsgSendPtrPtr =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
+
+/// NSColor(RGBA) converted to the CGColor that CALayer color properties expect.
+unsafe fn color_cg(red: f64, green: f64, blue: f64, alpha: f64) -> *mut c_void {
+    unsafe {
+        let msg_rgba: MsgSendRGBA = std::mem::transmute(objc_msgSend as *const ());
+        let color = msg_rgba(
+            objc_getClass(c"NSColor".as_ptr()),
+            sel_registerName(c"colorWithRed:green:blue:alpha:".as_ptr()),
+            red,
+            green,
+            blue,
+            alpha,
+        );
+        objc_msgSend(color, sel_registerName(c"CGColor".as_ptr()))
+    }
+}
+
+/// Boxes an `f64` as an `NSNumber` for gradient and animation values.
+unsafe fn number(value: f64) -> *mut c_void {
+    unsafe {
+        let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
+        msg_f64(
+            objc_getClass(c"NSNumber".as_ptr()),
+            sel_registerName(c"numberWithDouble:".as_ptr()),
+            value,
+        )
+    }
+}
+
+/// Attaches an infinitely repeating value animation to `layer`. Autoreversing
+/// animations ease in and out; one-way animations run linear.
+unsafe fn add_basic_anim(
+    layer: *mut c_void,
+    key_path: &std::ffi::CStr,
+    from_value: f64,
+    to_value: f64,
+    duration: f64,
+    autoreverses: bool,
+    animation_key: &std::ffi::CStr,
+) {
+    unsafe {
+        let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
+        let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
+        let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
+        let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
+        let msg_ptr_ptr: MsgSendPtrPtr = std::mem::transmute(objc_msgSend as *const ());
+
+        let timing_name = if autoreverses {
+            c"easeInEaseOut"
+        } else {
+            c"linear"
+        };
+        let timing = msg_ptr(
+            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
+            sel_registerName(c"functionWithName:".as_ptr()),
+            nsstring_cstr(timing_name),
+        );
+        let anim = msg_ptr(
+            objc_getClass(c"CABasicAnimation".as_ptr()),
+            sel_registerName(c"animationWithKeyPath:".as_ptr()),
+            nsstring_cstr(key_path),
+        );
+        msg_ptr(
+            anim,
+            sel_registerName(c"setFromValue:".as_ptr()),
+            number(from_value),
+        );
+        msg_ptr(
+            anim,
+            sel_registerName(c"setToValue:".as_ptr()),
+            number(to_value),
+        );
+        msg_f64(anim, sel_registerName(c"setDuration:".as_ptr()), duration);
+        msg_f32(
+            anim,
+            sel_registerName(c"setRepeatCount:".as_ptr()),
+            f32::MAX,
+        );
+        msg_bool(
+            anim,
+            sel_registerName(c"setAutoreverses:".as_ptr()),
+            autoreverses,
+        );
+        msg_ptr(
+            anim,
+            sel_registerName(c"setTimingFunction:".as_ptr()),
+            timing,
+        );
+        msg_ptr_ptr(
+            layer,
+            sel_registerName(c"addAnimation:forKey:".as_ptr()),
+            anim,
+            nsstring_cstr(animation_key),
+        );
+    }
+}
+
 pub(in crate::ui::overlay) fn create_notch_glow_panel(
     glow_rgb: Option<(f64, f64, f64)>,
 ) -> Option<Arc<Mutex<NotchGlowState>>> {
@@ -198,13 +299,6 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
 
-        type MsgSendRGBA =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64, f64, f64) -> *mut c_void;
-        let msg_rgba: MsgSendRGBA = std::mem::transmute(objc_msgSend as *const ());
-
-        let ns_color_class = objc_getClass(c"NSColor".as_ptr());
-        let rgba_sel = sel_registerName(c"colorWithRed:green:blue:alpha:".as_ptr());
-
         let rainbow = glow_rgb.is_none();
         let (gr, gg, gb) = glow_rgb.unwrap_or((0.4, 0.7, 1.0));
 
@@ -213,7 +307,6 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         let msg_array: MsgSendArrayObjs = std::mem::transmute(objc_msgSend as *const ());
         let ns_array_class = objc_getClass(c"NSArray".as_ptr());
         let arr_sel = sel_registerName(c"arrayWithObjects:count:".as_ptr());
-        let cg_color_sel = sel_registerName(c"CGColor".as_ptr());
         type MsgSendSetCGRect = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect);
         let msg_set_cg_rect: MsgSendSetCGRect = std::mem::transmute(objc_msgSend as *const ());
         type MsgSendSetCGPoint = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
@@ -231,76 +324,8 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
             unsafe extern "C" fn(*mut c_void, *mut c_void, CGAffineTransform);
         let msg_set_affine_transform: MsgSendSetAffineTransform =
             std::mem::transmute(objc_msgSend as *const ());
-        type MsgSendPtrPtr =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
         let msg_ptr_ptr: MsgSendPtrPtr = std::mem::transmute(objc_msgSend as *const ());
 
-        let ns_number = objc_getClass(c"NSNumber".as_ptr());
-        let ca_anim_class = objc_getClass(c"CABasicAnimation".as_ptr());
-        let anim_kp_sel = sel_registerName(c"animationWithKeyPath:".as_ptr());
-        let timing = msg_ptr(
-            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
-            sel_registerName(c"functionWithName:".as_ptr()),
-            nsstring_cstr(c"easeInEaseOut"),
-        );
-        let linear_timing = msg_ptr(
-            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
-            sel_registerName(c"functionWithName:".as_ptr()),
-            nsstring_cstr(c"linear"),
-        );
-
-        let color_cg = |red: f64, green: f64, blue: f64, alpha: f64| {
-            let color = msg_rgba(ns_color_class, rgba_sel, red, green, blue, alpha);
-            objc_msgSend(color, cg_color_sel)
-        };
-        let number = |value: f64| {
-            msg_f64(
-                ns_number,
-                sel_registerName(c"numberWithDouble:".as_ptr()),
-                value,
-            )
-        };
-        let add_basic_anim = |layer: *mut c_void,
-                              key_path: &std::ffi::CStr,
-                              from_value: f64,
-                              to_value: f64,
-                              duration: f64,
-                              autoreverses: bool,
-                              animation_key: &std::ffi::CStr| {
-            let anim = msg_ptr(ca_anim_class, anim_kp_sel, nsstring_cstr(key_path));
-            msg_ptr(
-                anim,
-                sel_registerName(c"setFromValue:".as_ptr()),
-                number(from_value),
-            );
-            msg_ptr(
-                anim,
-                sel_registerName(c"setToValue:".as_ptr()),
-                number(to_value),
-            );
-            msg_f64(anim, sel_registerName(c"setDuration:".as_ptr()), duration);
-            msg_f32(
-                anim,
-                sel_registerName(c"setRepeatCount:".as_ptr()),
-                f32::MAX,
-            );
-            msg_bool(
-                anim,
-                sel_registerName(c"setAutoreverses:".as_ptr()),
-                autoreverses,
-            );
-            msg_ptr(
-                anim,
-                sel_registerName(c"setTimingFunction:".as_ptr()),
-                if autoreverses { timing } else { linear_timing },
-            );
-            msg_ptr_ptr(
-                layer,
-                sel_registerName(c"addAnimation:forKey:".as_ptr()),
-                anim,
-                nsstring_cstr(animation_key),
-            );
-        };
         let set_gaussian_blur = |layer: *mut c_void, radius: f64| {
             let blur_filter = msg_ptr(
                 objc_getClass(c"CIFilter".as_ptr()),
@@ -779,7 +804,6 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         let panel_h = shell.panel_h;
 
         let msg_ptr: MsgSendPtr = std::mem::transmute(objc_msgSend as *const ());
-        let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_f32: MsgSendF32 = std::mem::transmute(objc_msgSend as *const ());
 
@@ -803,18 +827,10 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
 
         type MsgSendCGSize = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
         let msg_cgsize: MsgSendCGSize = std::mem::transmute(objc_msgSend as *const ());
-        type MsgSendRGBA =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64, f64, f64) -> *mut c_void;
-        let msg_rgba: MsgSendRGBA = std::mem::transmute(objc_msgSend as *const ());
-
         let ns_color_class = objc_getClass(c"NSColor".as_ptr());
-        let rgba_sel = sel_registerName(c"colorWithRed:green:blue:alpha:".as_ptr());
 
-        let dim_color = msg_rgba(ns_color_class, rgba_sel, cr, cg, cb, 0.20);
-        let dim_cg = objc_msgSend(dim_color, sel_registerName(c"CGColor".as_ptr()));
-
-        let bright_color = msg_rgba(ns_color_class, rgba_sel, cr, cg, cb, 1.0);
-        let bright_cg = objc_msgSend(bright_color, sel_registerName(c"CGColor".as_ptr()));
+        let dim_cg = color_cg(cr, cg, cb, 0.20);
+        let bright_cg = color_cg(cr, cg, cb, 1.0);
 
         let shape_class = objc_getClass(c"CAShapeLayer".as_ptr());
 
@@ -863,11 +879,6 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         );
         objc_release(glow_layer);
 
-        let ns_number = objc_getClass(c"NSNumber".as_ptr());
-        let ca_anim_class = objc_getClass(c"CABasicAnimation".as_ptr());
-        type MsgSendPtrPtr =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
-        let msg_ptr_ptr: MsgSendPtrPtr = std::mem::transmute(objc_msgSend as *const ());
         type MsgSendSetCGRect = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect);
         let msg_set_cg_rect: MsgSendSetCGRect = std::mem::transmute(objc_msgSend as *const ());
         type MsgSendSetCGPoint = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
@@ -950,13 +961,12 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
 
         let spot_half = (GLOW_COMET_LENGTH / grad_w) / 2.0;
         let center = 0.5;
-        let num_sel = sel_registerName(c"numberWithDouble:".as_ptr());
         let locs: [*mut c_void; 5] = [
-            msg_f64(ns_number, num_sel, 0.0),
-            msg_f64(ns_number, num_sel, center - spot_half),
-            msg_f64(ns_number, num_sel, center),
-            msg_f64(ns_number, num_sel, center + spot_half),
-            msg_f64(ns_number, num_sel, 1.0),
+            number(0.0),
+            number(center - spot_half),
+            number(center),
+            number(center + spot_half),
+            number(1.0),
         ];
         let locs_arr = msg_array(
             objc_getClass(c"NSArray".as_ptr()),
@@ -969,53 +979,17 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         msg_ptr(comet, sel_registerName(c"setMask:".as_ptr()), grad);
         msg_ptr(root_layer, sel_registerName(c"addSublayer:".as_ptr()), comet);
 
-        let timing = msg_ptr(
-            objc_getClass(c"CAMediaTimingFunction".as_ptr()),
-            sel_registerName(c"functionWithName:".as_ptr()),
-            nsstring_cstr(c"easeInEaseOut"),
-        );
-
-        let anim = msg_ptr(
-            ca_anim_class,
-            sel_registerName(c"animationWithKeyPath:".as_ptr()),
-            nsstring_cstr(c"position.x"),
-        );
         // Sweep the mask's bright spot across the notch span [left, right]
         // rather than the full panel width, which overshot past the notch into
         // the surrounding padding on each side.
-        let from_x = left;
-        let to_x = right;
-        msg_ptr(
-            anim,
-            sel_registerName(c"setFromValue:".as_ptr()),
-            msg_f64(ns_number, num_sel, from_x),
-        );
-        msg_ptr(
-            anim,
-            sel_registerName(c"setToValue:".as_ptr()),
-            msg_f64(ns_number, num_sel, to_x),
-        );
-        msg_f64(
-            anim,
-            sel_registerName(c"setDuration:".as_ptr()),
-            GLOW_ORBIT_DURATION,
-        );
-        msg_f32(
-            anim,
-            sel_registerName(c"setRepeatCount:".as_ptr()),
-            f32::MAX,
-        );
-        msg_bool(anim, sel_registerName(c"setAutoreverses:".as_ptr()), true);
-        msg_ptr(
-            anim,
-            sel_registerName(c"setTimingFunction:".as_ptr()),
-            timing,
-        );
-        msg_ptr_ptr(
+        add_basic_anim(
             grad,
-            sel_registerName(c"addAnimation:forKey:".as_ptr()),
-            anim,
-            nsstring_cstr(c"slide"),
+            c"position.x",
+            left,
+            right,
+            GLOW_ORBIT_DURATION,
+            true,
+            c"slide",
         );
         objc_release(grad);
         objc_release(comet);
