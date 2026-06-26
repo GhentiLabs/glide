@@ -18,6 +18,12 @@ struct GlowShell {
     panel_h: f64,
 }
 
+impl Drop for GlowShell {
+    fn drop(&mut self) {
+        unsafe { objc_release(self.panel) };
+    }
+}
+
 /// Builds the transparent, click-through panel sized to the notch and parked
 /// just above the screen edge, ready for a caller to add glow layers and slide
 /// it in. Shared by the aura and comet styles.
@@ -188,6 +194,10 @@ type MsgSendRGBA =
     unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64, f64, f64) -> *mut c_void;
 type MsgSendPtrPtr =
     unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
+type MsgSendSetCGRect = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect);
+type MsgSendSetCGPoint = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
+type MsgSendArrayObjs =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, *const *mut c_void, u64) -> *mut c_void;
 
 /// NSColor(RGBA) converted to the CGColor that CALayer color properties expect.
 unsafe fn color_cg(red: f64, green: f64, blue: f64, alpha: f64) -> *mut c_void {
@@ -302,14 +312,10 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         let rainbow = glow_rgb.is_none();
         let (gr, gg, gb) = glow_rgb.unwrap_or((0.4, 0.7, 1.0));
 
-        type MsgSendArrayObjs =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, *const *mut c_void, u64) -> *mut c_void;
         let msg_array: MsgSendArrayObjs = std::mem::transmute(objc_msgSend as *const ());
         let ns_array_class = objc_getClass(c"NSArray".as_ptr());
         let arr_sel = sel_registerName(c"arrayWithObjects:count:".as_ptr());
-        type MsgSendSetCGRect = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect);
         let msg_set_cg_rect: MsgSendSetCGRect = std::mem::transmute(objc_msgSend as *const ());
-        type MsgSendSetCGPoint = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
         let msg_set_point: MsgSendSetCGPoint = std::mem::transmute(objc_msgSend as *const ());
         #[repr(C)]
         struct CGAffineTransform {
@@ -786,6 +792,7 @@ pub(in crate::ui::overlay) fn create_notch_glow_panel(
         objc_release(aura_container);
 
         slide_glow_panel_in(&shell);
+        std::mem::forget(shell);
         Some(Arc::new(Mutex::new(NotchGlowState { panel })))
     }
 }
@@ -879,12 +886,8 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         );
         objc_release(glow_layer);
 
-        type MsgSendSetCGRect = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect);
         let msg_set_cg_rect: MsgSendSetCGRect = std::mem::transmute(objc_msgSend as *const ());
-        type MsgSendSetCGPoint = unsafe extern "C" fn(*mut c_void, *mut c_void, f64, f64);
         let msg_set_point: MsgSendSetCGPoint = std::mem::transmute(objc_msgSend as *const ());
-        type MsgSendArrayObjs =
-            unsafe extern "C" fn(*mut c_void, *mut c_void, *const *mut c_void, u64) -> *mut c_void;
         let msg_array: MsgSendArrayObjs = std::mem::transmute(objc_msgSend as *const ());
 
         let comet = objc_msgSend(shape_class, sel_registerName(c"new".as_ptr()));
@@ -942,7 +945,7 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         msg_set_point(grad, sel_registerName(c"setStartPoint:".as_ptr()), 0.0, 0.5);
         msg_set_point(grad, sel_registerName(c"setEndPoint:".as_ptr()), 1.0, 0.5);
 
-        let clear_cg2 = objc_msgSend(
+        let clear_cg = objc_msgSend(
             objc_msgSend(ns_color_class, sel_registerName(c"clearColor".as_ptr())),
             sel_registerName(c"CGColor".as_ptr()),
         );
@@ -950,7 +953,7 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
             objc_msgSend(ns_color_class, sel_registerName(c"whiteColor".as_ptr())),
             sel_registerName(c"CGColor".as_ptr()),
         );
-        let colors: [*mut c_void; 5] = [clear_cg2, clear_cg2, white_cg, clear_cg2, clear_cg2];
+        let colors: [*mut c_void; 5] = [clear_cg, clear_cg, white_cg, clear_cg, clear_cg];
         let colors_arr = msg_array(
             objc_getClass(c"NSArray".as_ptr()),
             sel_registerName(c"arrayWithObjects:count:".as_ptr()),
@@ -997,6 +1000,7 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         CGPathRelease(cg_path);
 
         slide_glow_panel_in(&shell);
+        std::mem::forget(shell);
         Some(Arc::new(Mutex::new(NotchGlowState { panel })))
     }
 }

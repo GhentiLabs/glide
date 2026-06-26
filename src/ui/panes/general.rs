@@ -56,11 +56,11 @@ impl SettingsApp {
                     .map(|d| {
                         if is_active {
                             d.border_color(cx.theme().primary)
+                                .bg(cx.theme().primary.opacity(0.08))
                         } else {
-                            d.border_color(cx.theme().border)
+                            d.border_color(cx.theme().border).bg(cx.theme().secondary)
                         }
                     })
-                    .bg(cx.theme().secondary)
                     .child(
                         div()
                             .text_lg()
@@ -124,11 +124,12 @@ impl SettingsApp {
                                         .map(|d| {
                                             if is_active {
                                                 d.border_color(cx.theme().primary)
+                                                    .bg(cx.theme().primary.opacity(0.08))
                                             } else {
                                                 d.border_color(cx.theme().border)
+                                                    .bg(cx.theme().secondary)
                                             }
                                         })
-                                        .bg(cx.theme().secondary)
                                         .child(position_button_preview(pos))
                                         .child(
                                             div()
@@ -180,11 +181,12 @@ impl SettingsApp {
                                         .map(|d| {
                                             if is_active {
                                                 d.border_color(cx.theme().primary)
+                                                    .bg(cx.theme().primary.opacity(0.08))
                                             } else {
                                                 d.border_color(cx.theme().border)
+                                                    .bg(cx.theme().secondary)
                                             }
                                         })
-                                        .bg(cx.theme().secondary)
                                         .child(
                                             div()
                                                 .text_lg()
