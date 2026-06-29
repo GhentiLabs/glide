@@ -153,9 +153,9 @@ impl ColorAccent {
     /// Returns `None` for Slate (rainbow hue-cycling glow).
     pub fn glow_rgb(self) -> Option<(f64, f64, f64)> {
         match self {
-            Self::Purple => Some((0.49, 0.42, 0.77)),
-            Self::Blue => Some((0.29, 0.56, 0.83)),
-            Self::Orange => Some((0.94, 0.38, 0.23)),
+            Self::Purple => Some((0.36, 0.18, 0.80)),
+            Self::Blue => Some((0.07, 0.39, 0.88)),
+            Self::Orange => Some((0.97, 0.26, 0.05)),
             Self::Slate => None,
         }
     }

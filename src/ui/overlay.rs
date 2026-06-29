@@ -10,7 +10,7 @@ use gpui::{
 };
 
 use crate::app::state::{OverlayPhase, SharedState};
-use crate::config::{OverlayConfig, OverlayPosition, OverlayStyle};
+use crate::config::{GlowVariant, OverlayConfig, OverlayPosition, OverlayStyle};
 
 use ffi::*;
 
@@ -328,7 +328,12 @@ impl OverlayController {
         }
 
         if config.overlay.style == OverlayStyle::Glow {
-            if let Some(state) = create_notch_glow_panel(config.app.accent.glow_rgb()) {
+            let glow_rgb = config.app.accent.glow_rgb();
+            let state = match config.overlay.glow_variant {
+                GlowVariant::Aura => create_notch_glow_panel(glow_rgb),
+                GlowVariant::Comet => create_notch_comet_panel(glow_rgb),
+            };
+            if let Some(state) = state {
                 self.active = Some(ActiveOverlay::NotchGlow(state));
             } else {
                 eprintln!("[glide] glow overlay: failed to create glow panel");

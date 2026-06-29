@@ -21,19 +21,28 @@ pub(in crate::ui::overlay) const GLOW_AURA_SCALE_X: f64 = 1.75;
 pub(in crate::ui::overlay) const GLOW_AURA_SCALE_Y: f64 = 0.85;
 pub(in crate::ui::overlay) const GLOW_AURA_NOTCH_OFFSET: f64 = 12.0;
 pub(in crate::ui::overlay) const GLOW_BLUR_RADIUS: f64 = 28.0;
-pub(in crate::ui::overlay) const GLOW_AURA_OPACITY: f64 = 0.58;
+pub(in crate::ui::overlay) const GLOW_AURA_OPACITY: f64 = 0.82;
 pub(in crate::ui::overlay) const GLOW_FLARE_BLUR_RADIUS: f64 = 7.0;
-pub(in crate::ui::overlay) const GLOW_FLARE_OPACITY: f64 = 0.68;
+pub(in crate::ui::overlay) const GLOW_FLARE_OPACITY: f64 = 0.85;
 pub(in crate::ui::overlay) const GLOW_BREATHE_DURATION: f64 = 6.0;
 pub(in crate::ui::overlay) const GLOW_BREATHE_MIN_SCALE: f64 = 0.86;
 pub(in crate::ui::overlay) const GLOW_BREATHE_MAX_SCALE: f64 = 1.18;
 pub(in crate::ui::overlay) const GLOW_SPIN_DURATION: f64 = 12.0;
+
+// Comet variant
+pub(in crate::ui::overlay) const GLOW_STROKE_WIDTH: f64 = 5.5;
+pub(in crate::ui::overlay) const GLOW_SHADOW_RADIUS: f64 = 20.0;
+pub(in crate::ui::overlay) const GLOW_CORNER_RADIUS: f64 = 14.0;
+pub(in crate::ui::overlay) const GLOW_ORBIT_DURATION: f64 = 1.5;
+pub(in crate::ui::overlay) const GLOW_COMET_LENGTH: f64 = 120.0;
 
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
 #[link(name = "QuartzCore", kind = "framework")]
 unsafe extern "C" {}
 #[link(name = "CoreImage", kind = "framework")]
+unsafe extern "C" {}
+#[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {}
 
 unsafe extern "C" {
@@ -43,6 +52,32 @@ unsafe extern "C" {
         receiver: *mut c_void,
         sel: *mut c_void,
     ) -> *mut c_void;
+}
+
+unsafe extern "C" {
+    pub(in crate::ui::overlay) fn CGPathCreateMutable() -> *mut c_void;
+    pub(in crate::ui::overlay) fn CGPathMoveToPoint(
+        path: *mut c_void,
+        m: *const c_void,
+        x: f64,
+        y: f64,
+    );
+    pub(in crate::ui::overlay) fn CGPathAddLineToPoint(
+        path: *mut c_void,
+        m: *const c_void,
+        x: f64,
+        y: f64,
+    );
+    pub(in crate::ui::overlay) fn CGPathAddArcToPoint(
+        path: *mut c_void,
+        m: *const c_void,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        radius: f64,
+    );
+    pub(in crate::ui::overlay) fn CGPathRelease(path: *mut c_void);
 }
 
 pub(in crate::ui::overlay) unsafe fn nsstring_cstr(s: &CStr) -> *mut c_void {
