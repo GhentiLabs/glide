@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,6 +12,15 @@ use super::{GlideConfig, Provider};
 
 const KEYRING_SERVICE: &str = "glide";
 const KEYRING_ACCOUNT: &str = "provider-api-keys";
+
+/// Mirror of the keychain's provider-keys payload, so `save` can skip keychain
+/// access (and its auth prompt) when the keys are unchanged.
+static KEYRING_MIRROR: Mutex<KeyringMirror> = Mutex::new(KeyringMirror::Unknown);
+
+enum KeyringMirror {
+    Unknown,
+    Synced(Option<String>),
+}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct ProviderKeyringPayload {
@@ -69,27 +79,42 @@ fn insert_provider_key(keys: &mut BTreeMap<String, String>, provider: &str, key:
 }
 
 pub(super) fn load_provider_keys_from_keyring() -> BTreeMap<String, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    let keys = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .and_then(|e| e.get_password())
         .ok()
         .map(|raw| decode_provider_keys(&raw))
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    *KEYRING_MIRROR.lock().expect("keyring mirror poisoned") =
+        KeyringMirror::Synced(encode_provider_keys(&keys));
+
+    keys
 }
 
 #[cfg(not(test))]
 pub(super) fn save_provider_keys_to_keyring(keys: &BTreeMap<String, String>) {
-    let Some(payload) = encode_provider_keys(keys) else {
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
-            let _ = entry.delete_credential();
-        }
+    let payload = encode_provider_keys(keys);
+
+    let mut mirror = KEYRING_MIRROR.lock().expect("keyring mirror poisoned");
+    if let KeyringMirror::Synced(current) = &*mirror
+        && *current == payload
+    {
+        return;
+    }
+
+    let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) else {
         return;
     };
-
-    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
-        let current = entry.get_password().unwrap_or_default();
-        if current != payload {
-            let _ = entry.set_password(&payload);
+    match payload {
+        Some(payload) => {
+            if entry.set_password(&payload).is_ok() {
+                *mirror = KeyringMirror::Synced(Some(payload));
+            }
         }
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => *mirror = KeyringMirror::Synced(None),
+            Err(_) => *mirror = KeyringMirror::Unknown,
+        },
     }
 }
 
