@@ -4,18 +4,24 @@ use std::sync::Arc;
 use gpui::{AppContext, TestAppContext, VisualTestContext};
 
 use crate::app::state::SharedAppState;
-use crate::config::{GlideConfig, ModelSelection, Provider};
+use crate::config::{GlideConfig, ModelSelection, Provider, Style};
 
 fn test_shared_state() -> SharedState {
     Arc::new(SharedAppState::new(GlideConfig::default()))
 }
 
 fn init_and_create_view(cx: &mut TestAppContext) -> (Entity<SettingsApp>, VisualTestContext) {
+    init_and_create_view_with(test_shared_state(), cx)
+}
+
+fn init_and_create_view_with(
+    shared: SharedState,
+    cx: &mut TestAppContext,
+) -> (Entity<SettingsApp>, VisualTestContext) {
     cx.update(|app| {
         gpui_component::init(app);
     });
 
-    let shared = test_shared_state();
     let (view, cx) = cx.add_window_view(|window, cx| SettingsApp::new(shared, window, cx));
     let cx = cx.clone();
     (view, cx)
@@ -92,6 +98,102 @@ mod settings_state {
                 defaults.providers.elevenlabs.base_url,
             );
         });
+    }
+
+    #[gpui::test]
+    async fn removing_style_preserves_other_styles_model_overrides(cx: &mut TestAppContext) {
+        let shared = test_shared_state();
+        shared
+            .update_config(|config| {
+                config.dictation.styles = vec![
+                    Style {
+                        name: "A".to_string(),
+                        apps: Vec::new(),
+                        prompt: String::new(),
+                        stt: None,
+                        llm: None,
+                    },
+                    Style {
+                        name: "B".to_string(),
+                        apps: Vec::new(),
+                        prompt: String::new(),
+                        stt: Some(ModelSelection {
+                            provider: Provider::ElevenLabs,
+                            model: "scribe_v1".to_string(),
+                        }),
+                        llm: Some(ModelSelection {
+                            provider: Provider::OpenAi,
+                            model: "gpt-5.4-nano".to_string(),
+                        }),
+                    },
+                ];
+            })
+            .unwrap();
+        let (view, mut cx) = init_and_create_view_with(shared, cx);
+
+        cx.update_entity(&view, |app, cx| {
+            app.remove_style(0, cx);
+            let styles = app.draft_from_inputs(cx).dictation.styles;
+            assert_eq!(styles.len(), 1);
+            assert_eq!(styles[0].name, "B");
+            assert_eq!(
+                styles[0].stt.as_ref().map(|sel| sel.model.as_str()),
+                Some("scribe_v1"),
+                "removing a style must not drop another style's STT override"
+            );
+            assert_eq!(
+                styles[0].llm.as_ref().map(|sel| sel.model.as_str()),
+                Some("gpt-5.4-nano"),
+                "removing a style must not drop another style's LLM override"
+            );
+        });
+    }
+
+    #[gpui::test]
+    async fn removing_unsaved_style_leaves_persisted_styles_intact(cx: &mut TestAppContext) {
+        let shared = test_shared_state();
+        shared
+            .update_config(|config| {
+                config.dictation.styles = vec![Style {
+                    name: "A".to_string(),
+                    apps: Vec::new(),
+                    prompt: String::new(),
+                    stt: Some(ModelSelection {
+                        provider: Provider::ElevenLabs,
+                        model: "scribe_v1".to_string(),
+                    }),
+                    llm: None,
+                }];
+            })
+            .unwrap();
+        let (view, mut cx) = init_and_create_view_with(shared.clone(), cx);
+
+        cx.update(|window, cx| {
+            view.update(cx, |app, cx| {
+                let entry = Style {
+                    name: "New".to_string(),
+                    apps: Vec::new(),
+                    prompt: String::new(),
+                    stt: None,
+                    llm: None,
+                };
+                let (inputs, subs) = SettingsApp::create_style_inputs(&entry, window, cx);
+                app.styles.push(inputs);
+                app._subscriptions.extend(subs);
+            });
+        });
+
+        cx.update_entity(&view, |app, cx| {
+            app.remove_style(1, cx);
+            let styles = app.draft_from_inputs(cx).dictation.styles;
+            assert_eq!(styles.len(), 1);
+            assert_eq!(styles[0].name, "A");
+            assert_eq!(
+                styles[0].stt.as_ref().map(|sel| sel.model.as_str()),
+                Some("scribe_v1")
+            );
+        });
+        assert_eq!(shared.snapshot().config.dictation.styles.len(), 1);
     }
 
     #[gpui::test]

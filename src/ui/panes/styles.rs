@@ -14,6 +14,26 @@ use super::super::SettingsApp;
 use super::super::helpers::*;
 
 impl SettingsApp {
+    pub(in crate::ui) fn remove_style(&mut self, index: usize, cx: &mut gpui::Context<Self>) {
+        self.styles.remove(index);
+        // Remove from config immediately so pending drafts (which hold only
+        // name/apps/prompt) keep lining up with the per-style stt/llm
+        // overrides stored in config. Styles added since the last save exist
+        // only in the draft, hence the bounds check.
+        let _ = self.shared.update_config(|config| {
+            if index < config.dictation.styles.len() {
+                config.dictation.styles.remove(index);
+            }
+        });
+        self.expanded_style = match self.expanded_style {
+            Some(current) if current == index => None,
+            Some(current) if current > index => Some(current - 1),
+            current => current,
+        };
+        self.schedule_autosave(cx);
+        cx.notify();
+    }
+
     pub(in crate::ui) fn render_styles_pane(
         &mut self,
         _window: &mut gpui::Window,
@@ -175,14 +195,7 @@ impl SettingsApp {
                         .small()
                         .compact()
                         .on_click(cx.listener(move |this, _, _window, cx| {
-                            this.styles.remove(index);
-                            this.expanded_style = match this.expanded_style {
-                                Some(current) if current == index => None,
-                                Some(current) if current > index => Some(current - 1),
-                                current => current,
-                            };
-                            this.schedule_autosave(cx);
-                            cx.notify();
+                            this.remove_style(index, cx);
                         })),
                 );
 
