@@ -28,3 +28,6 @@ target/
 
 .omx/
 .antigravitycli/
+
+.claude
+./claude
