@@ -21,6 +21,7 @@ type MsgSendUsize =
     unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
 type MsgSendLen = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
 type MsgSendRect = unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSRect;
+type MsgSendObjAtIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -35,6 +36,21 @@ struct NSRect {
 struct NotchDimensions {
     width: f64,
     height: f64,
+}
+
+/// The screen the notch overlay should target: the display with a physical
+/// notch, or the main screen when no notched display is attached.
+///
+/// The frame is in global (Cocoa) coordinates, so `x`/`y` are nonzero for any
+/// screen that is not at the origin of the arrangement.
+#[derive(Copy, Clone)]
+pub struct NotchScreen {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    /// Physical notch (width, height); `None` on the notchless fallback.
+    pub notch: Option<(f64, f64)>,
 }
 
 pub fn list_applications() -> Vec<String> {
@@ -258,29 +274,64 @@ pub fn main_display_size() -> (usize, usize) {
 }
 
 pub fn notch_width() -> Option<u32> {
-    notch_dimensions_for_main_screen().map(|notch| notch.width as u32)
+    notch_screen()?.notch.map(|(width, _)| width as u32)
 }
 
-pub fn notch_dimensions() -> Option<(f64, f64)> {
-    notch_dimensions_for_main_screen()
-        .filter(|notch| notch.height > 0.0)
-        .map(|notch| (notch.width, notch.height))
-}
-
-fn notch_dimensions_for_main_screen() -> Option<NotchDimensions> {
+/// Finds the screen with a physical notch by scanning `[NSScreen screens]`,
+/// falling back to `[NSScreen mainScreen]` (with `notch: None`) when none has
+/// one. `mainScreen` follows the key window, so it must not be used to locate
+/// the notch itself.
+pub fn notch_screen() -> Option<NotchScreen> {
     unsafe {
         let ns_screen = objc_getClass(c"NSScreen".as_ptr());
         if ns_screen.is_null() {
             return None;
         }
+
+        let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
+        let msg_len: MsgSendLen = std::mem::transmute(objc_msgSend as *const ());
+        let msg_at_idx: MsgSendObjAtIdx = std::mem::transmute(objc_msgSend as *const ());
+
+        let screens = objc_msgSend(ns_screen, sel_registerName(c"screens".as_ptr()));
+        if !screens.is_null() {
+            let count = msg_len(screens, sel_registerName(c"count".as_ptr()));
+            for i in 0..count {
+                let screen = msg_at_idx(screens, sel_registerName(c"objectAtIndex:".as_ptr()), i);
+                if screen.is_null() {
+                    continue;
+                }
+                let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
+                if let Some(notch) = notch_dimensions_of(screen, frame) {
+                    return Some(NotchScreen {
+                        x: frame.x,
+                        y: frame.y,
+                        width: frame.w,
+                        height: frame.h,
+                        notch: Some((notch.width, notch.height)),
+                    });
+                }
+            }
+        }
+
         let screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
         if screen.is_null() {
             return None;
         }
+        let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
+        Some(NotchScreen {
+            x: frame.x,
+            y: frame.y,
+            width: frame.w,
+            height: frame.h,
+            notch: None,
+        })
+    }
+}
 
+fn notch_dimensions_of(screen: *mut c_void, frame: NSRect) -> Option<NotchDimensions> {
+    unsafe {
         let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
 
-        let frame = msg_rect(screen, sel_registerName(c"frame".as_ptr()));
         let left_area = msg_rect(screen, sel_registerName(c"auxiliaryTopLeftArea".as_ptr()));
         let right_area = msg_rect(screen, sel_registerName(c"auxiliaryTopRightArea".as_ptr()));
 

@@ -36,6 +36,11 @@ pub(in crate::ui::overlay) const GLOW_CORNER_RADIUS: f64 = 14.0;
 pub(in crate::ui::overlay) const GLOW_ORBIT_DURATION: f64 = 1.5;
 pub(in crate::ui::overlay) const GLOW_COMET_LENGTH: f64 = 120.0;
 
+// NSWindowCollectionBehavior flags. FullScreenAuxiliary is required in
+// addition to CanJoinAllSpaces for the panel to appear over fullscreen apps.
+pub(in crate::ui::overlay) const NSWINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES: u64 = 1 << 0;
+pub(in crate::ui::overlay) const NSWINDOW_COLLECTION_BEHAVIOR_FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
+
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {}
 #[link(name = "QuartzCore", kind = "framework")]
@@ -109,8 +114,6 @@ pub(in crate::ui::overlay) type MsgSendU64 =
     unsafe extern "C" fn(*mut c_void, *mut c_void, u64) -> *mut c_void;
 pub(in crate::ui::overlay) type MsgSendPtr =
     unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
-pub(in crate::ui::overlay) type MsgSendRect =
-    unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSRect;
 pub(in crate::ui::overlay) type MsgSendRectBoolBool =
     unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect, u64, u64, bool) -> *mut c_void;
 pub(in crate::ui::overlay) type MsgSendSetRect =

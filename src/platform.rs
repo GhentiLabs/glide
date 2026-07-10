@@ -8,5 +8,5 @@ pub mod permissions;
 
 pub use macos::{
     app_icon_path, frontmost_app_name, fuzzy_match, list_applications, main_display_size,
-    notch_dimensions, notch_width, preload_app_icons,
+    notch_screen, notch_width, preload_app_icons,
 };
