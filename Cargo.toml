@@ -34,8 +34,20 @@ spectrum-analyzer = "1"
 # HTTP client for STT and LLM API calls
 reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls", "blocking"] }
 
-# Clipboard (paste via CoreGraphics FFI)
+# Clipboard (paste via CoreGraphics FFI; NSPasteboard snapshot/restore)
 arboard = "3"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSPasteboard",
+    "NSPasteboardItem",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSData",
+    "NSEnumerator",
+    "NSString",
+] }
 
 # Configuration
 serde = { version = "1", features = ["derive"] }
