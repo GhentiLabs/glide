@@ -59,7 +59,7 @@ pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
 
 /// Full-fidelity snapshot of the general pasteboard: one entry per pasteboard
 /// item, each holding every declared type (UTI) and its raw data.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct ClipboardSnapshot {
     items: Vec<Vec<(String, Vec<u8>)>>,
 }
@@ -69,29 +69,32 @@ fn previous_clipboard(config: &PasteConfig) -> Option<ClipboardSnapshot> {
 }
 
 fn snapshot_clipboard() -> Option<ClipboardSnapshot> {
-    let pasteboard = NSPasteboard::generalPasteboard();
-    let pasteboard_items = pasteboard.pasteboardItems()?;
+    // This runs on a background thread with no ambient autorelease pool.
+    autoreleasepool(|_| {
+        let pasteboard = NSPasteboard::generalPasteboard();
+        let pasteboard_items = pasteboard.pasteboardItems()?;
 
-    let mut items = Vec::with_capacity(pasteboard_items.len());
-    for item in &pasteboard_items {
-        // Reading data(forType:) resolves promised data; types whose data
-        // comes back nil are skipped rather than failing the snapshot. The
-        // pool drains the autoreleased NSData reads after each item.
-        let representations: Vec<(String, Vec<u8>)> = autoreleasepool(|_| {
-            item.types()
-                .iter()
-                .filter_map(|data_type| {
-                    item.dataForType(&data_type)
-                        .map(|data| (data_type.to_string(), data.to_vec()))
-                })
-                .collect()
-        });
-        if !representations.is_empty() {
-            items.push(representations);
+        let mut items = Vec::with_capacity(pasteboard_items.len());
+        for item in &pasteboard_items {
+            // Reading data(forType:) resolves promised data; types whose data
+            // comes back nil are skipped rather than failing the snapshot. The
+            // inner pool drains the autoreleased NSData reads after each item.
+            let representations: Vec<(String, Vec<u8>)> = autoreleasepool(|_| {
+                item.types()
+                    .iter()
+                    .filter_map(|data_type| {
+                        item.dataForType(&data_type)
+                            .map(|data| (data_type.to_string(), data.to_vec()))
+                    })
+                    .collect()
+            });
+            if !representations.is_empty() {
+                items.push(representations);
+            }
         }
-    }
 
-    (!items.is_empty()).then_some(ClipboardSnapshot { items })
+        (!items.is_empty()).then_some(ClipboardSnapshot { items })
+    })
 }
 
 fn restore_clipboard(snapshot: ClipboardSnapshot, transcript: &str) -> Result<()> {
@@ -115,10 +118,15 @@ fn restore_clipboard(snapshot: ClipboardSnapshot, transcript: &str) -> Result<()
         if !pasteboard.writeObjects(&NSArray::from_retained_slice(&staged)) {
             // The clear already emptied the pasteboard; put the transcript back
             // so paste output survives rather than leaving nothing behind.
-            if let Ok(mut clipboard) = Clipboard::new() {
-                let _ = clipboard.set_text(transcript.to_string());
+            let transcript_restored = Clipboard::new()
+                .and_then(|mut clipboard| clipboard.set_text(transcript.to_string()))
+                .is_ok();
+            if transcript_restored {
+                anyhow::bail!("pasteboard rejected restored items; kept transcript text instead");
             }
-            anyhow::bail!("pasteboard rejected restored items; kept transcript text instead");
+            anyhow::bail!(
+                "pasteboard rejected restored items and transcript re-write failed; clipboard left empty"
+            );
         }
         Ok(())
     })
@@ -251,9 +259,10 @@ mod tests {
         .expect("restore should succeed");
 
         let restored = snapshot_clipboard().expect("clipboard should have content after restore");
-        assert_eq!(restored, snapshot);
 
         // Every staged representation must survive the round trip verbatim.
+        // (No strict snapshot equality: macOS may synthesize sibling UTI
+        // representations, making the restored snapshot a superset.)
         for (item_index, staged_item) in staged.items.iter().enumerate() {
             for staged_representation in staged_item {
                 assert!(
