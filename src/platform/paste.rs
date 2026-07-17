@@ -46,12 +46,18 @@ pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
 
     let mut clipboard = Clipboard::new().context("failed to access clipboard")?;
     set_clipboard_text(&mut clipboard, text.to_string()).context("failed to update clipboard")?;
+    let transcript_change_count = clipboard_change_count();
 
     thread::sleep(Duration::from_millis(CLIPBOARD_SETTLE_DELAY_MS));
     simulate_paste();
 
     if let Some(previous_contents) = previous_contents {
-        restore_clipboard_async(previous_contents, text.to_string(), restore_delay(config));
+        restore_clipboard_async(
+            previous_contents,
+            text.to_string(),
+            restore_delay(config),
+            transcript_change_count,
+        );
     }
 
     Ok(())
@@ -59,13 +65,16 @@ pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
 
 /// Full-fidelity snapshot of the general pasteboard: one entry per pasteboard
 /// item, each holding every declared type (UTI) and its raw data.
-#[derive(Debug)]
 struct ClipboardSnapshot {
     items: Vec<Vec<(String, Vec<u8>)>>,
 }
 
 fn previous_clipboard(config: &PasteConfig) -> Option<ClipboardSnapshot> {
     config.restore_clipboard.then(snapshot_clipboard).flatten()
+}
+
+fn clipboard_change_count() -> isize {
+    autoreleasepool(|_| NSPasteboard::generalPasteboard().changeCount())
 }
 
 fn snapshot_clipboard() -> Option<ClipboardSnapshot> {
@@ -171,8 +180,13 @@ fn restore_clipboard_async(
     previous_contents: ClipboardSnapshot,
     transcript: String,
     delay: Duration,
+    transcript_change_count: isize,
 ) {
     spawn_delayed_restore(delay, move || {
+        if clipboard_change_count() != transcript_change_count {
+            eprintln!("[glide] Paste: clipboard changed since paste; skipping restore");
+            return;
+        }
         match restore_clipboard(previous_contents, &transcript) {
             Ok(()) => eprintln!("[glide] Paste: restored clipboard"),
             Err(error) => eprintln!("[glide] Paste: failed to restore clipboard: {error:#}"),
