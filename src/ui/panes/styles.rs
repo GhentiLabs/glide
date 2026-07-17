@@ -15,6 +15,9 @@ use super::super::helpers::*;
 
 impl SettingsApp {
     pub(in crate::ui) fn remove_style(&mut self, index: usize, cx: &mut gpui::Context<Self>) {
+        if index >= self.styles.len() {
+            return;
+        }
         self.styles.remove(index);
         // Remove from config immediately so pending drafts (which hold only
         // name/apps/prompt) keep lining up with the per-style stt/llm
