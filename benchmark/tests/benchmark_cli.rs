@@ -85,7 +85,7 @@ fn parses_prompt_eval_cli_command() {
         "--candidate",
         "openai:gpt-5.4-nano",
         "--candidate",
-        "groq:meta-llama/llama-4-scout-17b-16e-instruct",
+        "groq:llama-3.3-70b-versatile",
         "--runs",
         "2",
         "--timeout-secs",
@@ -107,7 +107,7 @@ fn parses_prompt_eval_cli_command() {
                     .iter()
                     .map(|candidate| candidate.model.as_str())
                     .collect::<Vec<_>>(),
-                vec!["gpt-5.4-nano", "meta-llama/llama-4-scout-17b-16e-instruct",]
+                vec!["gpt-5.4-nano", "llama-3.3-70b-versatile",]
             );
             assert_eq!(options.runs, 2);
             assert_eq!(options.timeout_secs, 15);

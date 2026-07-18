@@ -13,10 +13,17 @@ const STT_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
 ];
 
 const LLM_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
-    (Provider::Groq, "meta-llama/llama-4-scout-17b-16e-instruct"),
+    (Provider::Groq, "llama-3.3-70b-versatile"),
     (Provider::OpenAi, "gpt-5.4-nano"),
     (Provider::Fireworks, "accounts/fireworks/models/gpt-oss-20b"),
     (Provider::Cerebras, "gpt-oss-120b"),
+];
+
+/// Models the provider has removed from its API; saved selections pointing at
+/// one of these are repaired to the smart default by `apply_smart_defaults`.
+const DECOMMISSIONED_MODELS: &[(Provider, &str)] = &[
+    (Provider::Groq, "meta-llama/llama-4-scout-17b-16e-instruct"),
+    (Provider::Groq, "mixtral-8x7b-32768"),
 ];
 
 pub fn smart_stt_default() -> Option<ModelSelection> {
@@ -73,6 +80,9 @@ fn stt_selection_available(selection: &ModelSelection) -> bool {
 }
 
 fn llm_selection_available(selection: &ModelSelection) -> bool {
+    if DECOMMISSIONED_MODELS.contains(&(selection.provider, selection.model.as_str())) {
+        return false;
+    }
     match selection.provider {
         Provider::OpenAi | Provider::Groq | Provider::Cerebras | Provider::Fireworks => {
             provider_verified(selection.provider)

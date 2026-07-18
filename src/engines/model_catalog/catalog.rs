@@ -66,14 +66,9 @@ fn known_remote_llm_models() -> Vec<ModelInfo> {
         model_info(Provider::OpenAi, "gpt-4o-mini", false),
         model_info(Provider::OpenAi, "gpt-4o", false),
         model_info(Provider::OpenAi, "gpt-4-turbo", false),
-        model_info(
-            Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            false,
-        ),
+        model_info(Provider::Groq, "openai/gpt-oss-20b", false),
         model_info(Provider::Groq, "llama-3.3-70b-versatile", false),
         model_info(Provider::Groq, "llama-3.1-8b-instant", false),
-        model_info(Provider::Groq, "mixtral-8x7b-32768", false),
         model_info(
             Provider::Fireworks,
             "accounts/fireworks/models/gpt-oss-20b",

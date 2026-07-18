@@ -168,12 +168,12 @@ mod smart_defaults {
             (
                 &[Provider::Groq][..],
                 Provider::Groq,
-                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-3.3-70b-versatile",
             ),
             (
                 &[Provider::OpenAi, Provider::Groq][..],
                 Provider::Groq,
-                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-3.3-70b-versatile",
             ),
         ];
 
@@ -234,7 +234,7 @@ mod smart_defaults {
         assert_selection(
             config.dictation.llm.as_ref().unwrap(),
             Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b-versatile",
         );
         assert!(config.dictation.smart_defaults_applied);
 
@@ -272,7 +272,26 @@ mod smart_defaults {
         assert_selection(
             config.dictation.llm.as_ref().unwrap(),
             Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b-versatile",
+        );
+    }
+
+    #[test]
+    fn apply_smart_defaults_repairs_decommissioned_llm_model() {
+        let _state = with_verified_providers(&[Provider::Groq]);
+        let mut config = GlideConfig::default();
+        config.dictation.smart_defaults_applied = true;
+        config.dictation.llm = Some(ModelSelection {
+            provider: Provider::Groq,
+            model: "meta-llama/llama-4-scout-17b-16e-instruct".to_string(),
+        });
+
+        apply_smart_defaults(&mut config);
+
+        assert_selection(
+            config.dictation.llm.as_ref().unwrap(),
+            Provider::Groq,
+            "llama-3.3-70b-versatile",
         );
     }
 
