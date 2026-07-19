@@ -152,7 +152,10 @@ unsafe fn slide_glow_panel_in(shell: &GlowShell) {
         let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
 
-        objc_msgSend(shell.panel, sel_registerName(c"orderFrontRegardless".as_ptr()));
+        objc_msgSend(
+            shell.panel,
+            sel_registerName(c"orderFrontRegardless".as_ptr()),
+        );
         let ns_anim = objc_getClass(c"NSAnimationContext".as_ptr());
         objc_msgSend(ns_anim, sel_registerName(c"beginGrouping".as_ptr()));
         let current_ctx = objc_msgSend(ns_anim, sel_registerName(c"currentContext".as_ptr()));
@@ -980,7 +983,11 @@ pub(in crate::ui::overlay) fn create_notch_comet_panel(
         msg_ptr(grad, sel_registerName(c"setLocations:".as_ptr()), locs_arr);
 
         msg_ptr(comet, sel_registerName(c"setMask:".as_ptr()), grad);
-        msg_ptr(root_layer, sel_registerName(c"addSublayer:".as_ptr()), comet);
+        msg_ptr(
+            root_layer,
+            sel_registerName(c"addSublayer:".as_ptr()),
+            comet,
+        );
 
         // Sweep the mask's bright spot across the notch span [left, right]
         // rather than the full panel width, which overshot past the notch into

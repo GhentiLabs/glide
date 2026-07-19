@@ -284,13 +284,12 @@ fn set_apple_speech_download_child(run: &DownloadRun, child: AppleSpeechDownload
 }
 
 fn clear_apple_speech_download_child(run: &DownloadRun) {
-    if let Ok(mut children) = download_children().lock() {
-        if children
+    if let Ok(mut children) = download_children().lock()
+        && children
             .get(run.id())
             .is_some_and(|entry| entry.run_id == run.run_id())
-        {
-            children.remove(run.id());
-        }
+    {
+        children.remove(run.id());
     }
 }
 

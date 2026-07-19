@@ -19,7 +19,9 @@ static KEYRING_MIRROR: Mutex<KeyringMirror> = Mutex::new(KeyringMirror::Unknown)
 
 enum KeyringMirror {
     Unknown,
-    Synced(Option<String>),
+    // The payload's only reader, save_provider_keys_to_keyring, is compiled
+    // out under cfg(test), so test builds see the field as dead.
+    Synced(#[cfg_attr(test, allow(dead_code))] Option<String>),
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

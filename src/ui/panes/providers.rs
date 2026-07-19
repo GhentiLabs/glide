@@ -240,7 +240,7 @@ impl SettingsApp {
                                     .map(|score| (status.clone(), score))
                             })
                             .collect();
-                        scored.sort_by(|a, b| b.1.cmp(&a.1));
+                        scored.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
                         scored.into_iter().map(|(status, _)| status).collect()
                     };
                     if query.trim().is_empty() {
