@@ -7,7 +7,10 @@ pub use crate::config::{
     GlideConfig, ModelSelection, PasteConfig, Provider, ProvidersConfig, ReplacementRule,
 };
 pub use crate::engines::llm::LlmProvider;
-pub use crate::engines::model_catalog::known_models::LLM_REMOTE_DEFAULTS;
+pub use crate::engines::model_catalog::ModelInfo;
+pub use crate::engines::model_catalog::known_models::{
+    LLM_REMOTE_DEFAULTS, STT_REMOTE_DEFAULTS, known_remote_llm_models, known_remote_stt_models,
+};
 pub use crate::engines::stt::SttProvider;
 
 pub fn build_stt_provider(
