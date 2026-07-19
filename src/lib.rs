@@ -4,6 +4,7 @@
 mod audio;
 mod config;
 mod pipeline; // record → transcribe → clean up → paste
+mod text; // shared text-scanning helpers
 
 // Application lifecycle & shared state
 mod app; // startup, state, window actions, tracing
