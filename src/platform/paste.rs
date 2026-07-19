@@ -260,7 +260,6 @@ mod tests {
 
         let snapshot = snapshot_clipboard().expect("snapshot should capture staged content");
 
-        // Simulate the transcript overwriting the clipboard.
         let mut clipboard = Clipboard::new().unwrap();
         set_clipboard_text(&mut clipboard, "transcript".to_string()).unwrap();
 
