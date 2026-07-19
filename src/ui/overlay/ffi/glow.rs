@@ -28,7 +28,10 @@ impl Drop for GlowShell {
 /// just above the screen edge, ready for a caller to add glow layers and slide
 /// it in. Shared by the aura and comet styles.
 unsafe fn create_glow_shell() -> Option<GlowShell> {
-    let (notch_w, notch_h) = crate::platform::notch_dimensions()
+    let screen = crate::platform::notch_screen()?;
+    let (notch_w, notch_h) = screen
+        .notch
+        .filter(|&(_, height)| height > 0.0)
         .unwrap_or((NOTCH_WIDTH_FALLBACK as f64, NOTCH_HEIGHT_FALLBACK));
     let panel_w = notch_w + 2.0 * GLOW_PADDING;
     let panel_h = notch_h + GLOW_PADDING;
@@ -38,20 +41,13 @@ unsafe fn create_glow_shell() -> Option<GlowShell> {
         let msg_bool: MsgSendBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_u64: MsgSendU64 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
         let msg_init_rect: MsgSendRectBoolBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
 
-        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
-        let main_screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
-        if main_screen.is_null() {
-            return None;
-        }
-        let screen_frame = msg_rect(main_screen, sel_registerName(c"frame".as_ptr()));
-
-        let x = (screen_frame.w - panel_w) / 2.0;
-        let y_final = screen_frame.y + screen_frame.h - panel_h;
-        let y_hidden = screen_frame.y + screen_frame.h;
+        // The screen frame is in global coordinates; x/y must include its origin.
+        let x = screen.x + (screen.width - panel_w) / 2.0;
+        let y_final = screen.y + screen.height - panel_h;
+        let y_hidden = screen.y + screen.height;
         let ns_panel_class = objc_getClass(c"NSPanel".as_ptr());
         let panel = objc_msgSend(ns_panel_class, sel_registerName(c"alloc".as_ptr()));
         let content_rect = NSRect {
@@ -92,7 +88,8 @@ unsafe fn create_glow_shell() -> Option<GlowShell> {
         msg_u64(
             panel,
             sel_registerName(c"setCollectionBehavior:".as_ptr()),
-            1 << 0,
+            NSWINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES
+                | NSWINDOW_COLLECTION_BEHAVIOR_FULL_SCREEN_AUXILIARY,
         );
         msg_bool(
             panel,

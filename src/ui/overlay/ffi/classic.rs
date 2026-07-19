@@ -18,7 +18,11 @@ unsafe impl Sync for NotchPanelState {}
 pub(in crate::ui::overlay) fn create_notch_panel(
     bar_rgba: (f64, f64, f64, f64),
 ) -> Option<Arc<Mutex<NotchPanelState>>> {
-    let notch_w = crate::platform::notch_width().unwrap_or(NOTCH_WIDTH_FALLBACK) as f64;
+    let screen = crate::platform::notch_screen()?;
+    let notch_w = screen
+        .notch
+        .map(|(width, _)| width)
+        .unwrap_or(NOTCH_WIDTH_FALLBACK as f64);
     let notch_h = NOTCH_HEIGHT;
     let bar_count = NOTCH_BAR_COUNT;
 
@@ -28,20 +32,13 @@ pub(in crate::ui::overlay) fn create_notch_panel(
         let msg_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_u64: MsgSendU64 = std::mem::transmute(objc_msgSend as *const ());
         let msg_f64: MsgSendF64 = std::mem::transmute(objc_msgSend as *const ());
-        let msg_rect: MsgSendRect = std::mem::transmute(objc_msgSend as *const ());
         let msg_init_rect: MsgSendRectBoolBool = std::mem::transmute(objc_msgSend as *const ());
         let msg_set_rect: MsgSendSetRect = std::mem::transmute(objc_msgSend as *const ());
 
-        let ns_screen = objc_getClass(c"NSScreen".as_ptr());
-        let main_screen = objc_msgSend(ns_screen, sel_registerName(c"mainScreen".as_ptr()));
-        if main_screen.is_null() {
-            return None;
-        }
-        let screen_frame = msg_rect(main_screen, sel_registerName(c"frame".as_ptr()));
-
-        let x = (screen_frame.w - notch_w) / 2.0;
-        let y_final = screen_frame.y + screen_frame.h - notch_h;
-        let y_hidden = screen_frame.y + screen_frame.h;
+        // The screen frame is in global coordinates; x/y must include its origin.
+        let x = screen.x + (screen.width - notch_w) / 2.0;
+        let y_final = screen.y + screen.height - notch_h;
+        let y_hidden = screen.y + screen.height;
 
         let ns_panel_class = objc_getClass(c"NSPanel".as_ptr());
         let panel = objc_msgSend(ns_panel_class, sel_registerName(c"alloc".as_ptr()));
@@ -83,7 +80,8 @@ pub(in crate::ui::overlay) fn create_notch_panel(
         msg_u64(
             panel,
             sel_registerName(c"setCollectionBehavior:".as_ptr()),
-            1 << 0,
+            NSWINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES
+                | NSWINDOW_COLLECTION_BEHAVIOR_FULL_SCREEN_AUXILIARY,
         );
         msg_bool(
             panel,
