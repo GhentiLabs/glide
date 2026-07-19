@@ -34,5 +34,6 @@ pub mod apple_bridge;
 pub mod llm;
 pub mod model_assets;
 pub mod model_catalog;
+pub(crate) mod net;
 pub(crate) mod prewarm;
 pub mod stt;

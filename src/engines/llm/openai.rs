@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Provider, ProvidersConfig};
+use crate::engines::net;
 
 use super::build_cleanup_user_prompt;
 
@@ -26,7 +27,7 @@ impl OpenAiLlmProvider {
         let api_key = creds.resolve_api_key("LLM")?;
         let endpoint = provider.llm_endpoint(&creds.base_url);
         Ok(Self {
-            client: Client::new(),
+            client: net::client(net::LLM_TIMEOUT),
             provider,
             endpoint,
             model: model.to_string(),
@@ -80,19 +81,17 @@ impl super::LlmProvider for OpenAiLlmProvider {
             ],
         };
 
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&request)
-            .send()
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to call {} chat completions API",
-                    self.provider.label()
-                )
-            })?;
+        let response = net::send_with_retry(
+            || {
+                Ok(self
+                    .client
+                    .post(&self.endpoint)
+                    .bearer_auth(&self.api_key)
+                    .json(&request))
+            },
+            &format!("{} chat completions API", self.provider.label()),
+        )
+        .await?;
         let status = response.status();
         if !status.is_success() {
             let body = response
