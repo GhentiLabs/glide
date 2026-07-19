@@ -88,6 +88,10 @@ impl SettingsApp {
         config.dictation.system_prompt = self.default_prompt.read(cx).value().to_string();
         config.dictation.sync_system_prompt_default_flag();
 
+        // Invariant: self.styles[i] corresponds to config.dictation.styles[i] for
+        // i < config len (unsaved styles are a trailing suffix); every mutation of
+        // either list must preserve this, since stt/llm overrides are carried over
+        // purely by position here.
         let existing_styles = config.dictation.styles.clone();
         config.dictation.styles = self
             .styles
