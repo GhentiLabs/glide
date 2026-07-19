@@ -45,8 +45,8 @@ pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
             if tap.is_null() {
                 let ctx = Box::from_raw(ctx_ptr as *mut TapContext);
                 LISTENER_RUNNING.store(false, Ordering::SeqCst);
-                eprintln!(
-                    "[glide] Failed to create event tap. Grant Input Monitoring permission in \
+                tracing::error!(
+                    "Failed to create event tap. Grant Input Monitoring permission in \
                      System Settings > Privacy & Security > Input Monitoring and relaunch."
                 );
                 ctx.shared.set_error();

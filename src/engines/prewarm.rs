@@ -39,7 +39,7 @@ pub(crate) fn start_recording_prewarm(
 
 async fn run_blocking_prewarm(label: &'static str, f: impl FnOnce() + Send + 'static) {
     if let Err(error) = tokio::task::spawn_blocking(f).await {
-        eprintln!("[glide] provider prewarm {label} task failed: {error:#}");
+        tracing::warn!("provider prewarm {label} task failed: {error:#}");
     }
 }
 
@@ -98,10 +98,7 @@ fn prewarm_stt_selection(selection: &ModelSelection) {
     }
 
     if let Err(error) = stt::prewarm_provider(selection.provider, &selection.model) {
-        eprintln!(
-            "[glide] Parakeet prewarm failed for {}: {error:#}",
-            selection.model
-        );
+        tracing::warn!("Parakeet prewarm failed for {}: {error:#}", selection.model);
     }
 }
 
@@ -116,8 +113,8 @@ fn prewarm_llm_selection(
 
     let system_prompt = llm::build_cleanup_system_prompt(prompt_template, style_prompt);
     if let Err(error) = apple_bridge::prewarm_foundation(&selection.model, &system_prompt) {
-        eprintln!(
-            "[glide] Apple Foundation prewarm failed for {}: {error:#}",
+        tracing::warn!(
+            "Apple Foundation prewarm failed for {}: {error:#}",
             selection.model
         );
     }

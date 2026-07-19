@@ -26,7 +26,7 @@ pub(super) unsafe extern "C" fn event_tap_callback(
     {
         if !ctx.tap.is_null() {
             unsafe { ffi::CGEventTapEnable(ctx.tap, true) };
-            eprintln!("[glide] Event tap disabled by system (type {event_type:#x}); re-enabled.");
+            tracing::warn!("Event tap disabled by system (type {event_type:#x}); re-enabled.");
         }
         return event;
     }

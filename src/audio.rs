@@ -194,7 +194,7 @@ fn build_input_stream(
 }
 
 fn log_stream_error(error: cpal::StreamError) {
-    eprintln!("audio stream error: {error}");
+    tracing::error!("audio stream error: {error}");
 }
 
 fn encode_wav(samples: &[i16], sample_rate: u32) -> Result<Vec<u8>> {
