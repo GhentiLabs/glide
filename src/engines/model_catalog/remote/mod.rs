@@ -1,5 +1,8 @@
 use std::{
-    sync::{Mutex, OnceLock},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -36,7 +39,17 @@ impl DiscoveredModels {
     }
 }
 
-pub fn fetch_all_models(providers: &ProvidersConfig) {
+static FETCH_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// Monotonic count of completed fetches, bumped after `on_complete` so a
+/// change guarantees the repaired config is already saved.
+pub fn fetch_generation() -> u64 {
+    FETCH_GENERATION.load(Ordering::Acquire)
+}
+
+/// Fetches provider model lists on a background thread; `on_complete` runs on
+/// that thread after the catalog and verification state are published.
+pub fn fetch_all_models(providers: &ProvidersConfig, on_complete: impl FnOnce() + Send + 'static) {
     let remote_credentials = remote_credentials(providers);
 
     std::thread::spawn(move || {
@@ -48,6 +61,8 @@ pub fn fetch_all_models(providers: &ProvidersConfig) {
 
         discovered.sort();
         discovered.publish();
+        on_complete();
+        FETCH_GENERATION.fetch_add(1, Ordering::AcqRel);
     });
 }
 
@@ -84,6 +99,7 @@ pub(in crate::engines::model_catalog) fn excluded_remote_llm_model(
         || id_lower.contains("-audio-")
         || id_lower.contains("davinci")
         || id_lower.contains("babbage")
+        || id_lower.contains("guard")
         || id_lower.contains("canary")
         || id_lower.contains("search")
         || id_lower.contains("similarity")

@@ -43,19 +43,33 @@ impl SettingsApp {
         let _ = self.shared.update_config(move |config| *config = draft);
         if providers_changed {
             self.last_fetched_providers = providers.clone();
-            crate::engines::model_catalog::fetch_all_models(&providers);
-
+            let initial = crate::engines::model_catalog::fetch_generation();
             let shared = self.shared.clone();
-            cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(Duration::from_secs(3)).await;
-                if crate::engines::model_catalog::any_provider_verified() {
-                    let _ = shared.update_config(|config| {
-                        crate::engines::model_catalog::apply_smart_defaults(config);
-                    });
-                }
-                let _ = this.update(cx, |_this, cx| cx.notify());
-            })
-            .detach();
+            crate::engines::model_catalog::fetch_all_models(&providers, move || {
+                let _ = shared.update_config(crate::engines::model_catalog::apply_smart_defaults);
+            });
+            Self::notify_when_models_refresh(initial, cx);
         }
+    }
+
+    /// Redraws once the fetch generation moves past `initial_generation` (or
+    /// after a timeout beyond the fetch's own), so repaired selections show up
+    /// as soon as they are saved.
+    pub(in crate::ui) fn notify_when_models_refresh(
+        initial_generation: u64,
+        cx: &gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            for _ in 0..60 {
+                if crate::engines::model_catalog::fetch_generation() != initial_generation {
+                    break;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+            }
+            let _ = this.update(cx, |_this, cx| cx.notify());
+        })
+        .detach();
     }
 }
