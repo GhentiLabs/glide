@@ -164,10 +164,7 @@ impl SettingsApp {
                                 };
                                 variant_cards = variant_cards.child(
                                     div()
-                                        .id(SharedString::from(format!(
-                                            "glow-{}",
-                                            variant.label()
-                                        )))
+                                        .id(SharedString::from(format!("glow-{}", variant.label())))
                                         .flex()
                                         .flex_col()
                                         .items_center()
