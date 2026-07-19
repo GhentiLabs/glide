@@ -3,6 +3,7 @@
 // Core dictation flow
 mod audio;
 mod config;
+mod logging;
 mod pipeline; // record → transcribe → clean up → paste
 mod text; // shared text-scanning helpers
 

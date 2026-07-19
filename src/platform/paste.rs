@@ -184,12 +184,12 @@ fn restore_clipboard_async(
 ) {
     spawn_delayed_restore(delay, move || {
         if clipboard_change_count() != transcript_change_count {
-            eprintln!("[glide] Paste: clipboard changed since paste; skipping restore");
+            tracing::info!("Paste: clipboard changed since paste; skipping restore");
             return;
         }
         match restore_clipboard(previous_contents, &transcript) {
-            Ok(()) => eprintln!("[glide] Paste: restored clipboard"),
-            Err(error) => eprintln!("[glide] Paste: failed to restore clipboard: {error:#}"),
+            Ok(()) => tracing::info!("Paste: restored clipboard"),
+            Err(error) => tracing::warn!("Paste: failed to restore clipboard: {error:#}"),
         }
     });
 }

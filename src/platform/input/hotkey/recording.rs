@@ -29,8 +29,8 @@ fn ensure_accessibility_ready(ctx: &mut TapContext) -> bool {
     }
 
     ctx.pressed = false;
-    eprintln!(
-        "[glide] Accessibility permission is required to paste dictated text. \
+    tracing::warn!(
+        "Accessibility permission is required to paste dictated text. \
          Enable Glide in System Settings > Privacy & Security > Accessibility, then try again."
     );
     ctx.shared.set_error();
@@ -62,7 +62,7 @@ fn handle_microphone_prompt(ctx: &mut TapContext) {
     if requested_status.can_capture() {
         ctx.shared.set_status(RuntimeStatus::Idle);
     } else if let Some(message) = permissions::microphone_access_error(requested_status) {
-        eprintln!("[glide] {message}");
+        tracing::warn!("{message}");
         ctx.shared.set_error();
         if requested_status.is_denied_or_restricted() {
             permissions::open_microphone_settings();
@@ -76,9 +76,9 @@ fn handle_microphone_unavailable(
 ) {
     ctx.pressed = false;
     if let Some(message) = permissions::microphone_access_error(status) {
-        eprintln!("[glide] {message}");
+        tracing::warn!("{message}");
     } else {
-        eprintln!("[glide] Microphone access is not available");
+        tracing::warn!("Microphone access is not available");
     }
     ctx.shared.set_error();
     dismiss_overlay(ctx);
@@ -102,7 +102,7 @@ fn start_recording(ctx: &mut TapContext) {
         }
         Err(error) => {
             ctx.pressed = false;
-            eprintln!("failed to start recording: {error:#}");
+            tracing::error!("failed to start recording: {error:#}");
             ctx.shared.set_error();
         }
     }
@@ -136,7 +136,7 @@ fn handle_recorded_audio(ctx: &mut TapContext, audio: RecordedAudio) {
                 shared.set_overlay_phase(OverlayPhase::Dismissed);
             }
             Err(error) => {
-                eprintln!("pipeline error: {error:#}");
+                tracing::error!("pipeline error: {error:#}");
                 shared.set_error();
                 shared.set_overlay_phase(OverlayPhase::Dismissed);
             }
@@ -145,7 +145,7 @@ fn handle_recorded_audio(ctx: &mut TapContext, audio: RecordedAudio) {
 }
 
 fn handle_stop_error(ctx: &mut TapContext, error: anyhow::Error) {
-    eprintln!("recording stop error: {error:#}");
+    tracing::error!("recording stop error: {error:#}");
     ctx.shared.set_error();
     dismiss_overlay(ctx);
 }

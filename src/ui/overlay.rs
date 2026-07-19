@@ -310,7 +310,7 @@ impl OverlayController {
                         true
                     })
                     .unwrap_or_else(|_| {
-                        eprintln!("[glide] overlay controller: entity released, stopping poll");
+                        tracing::info!("overlay controller: entity released, stopping poll");
                         false
                     });
                 if !should_continue {
@@ -336,7 +336,7 @@ impl OverlayController {
             if let Some(state) = state {
                 self.active = Some(ActiveOverlay::NotchGlow(state));
             } else {
-                eprintln!("[glide] glow overlay: failed to create glow panel");
+                tracing::error!("glow overlay: failed to create glow panel");
             }
             return;
         }
@@ -379,7 +379,7 @@ impl OverlayController {
                 );
                 match handle {
                     Ok(h) => self.active = Some(ActiveOverlay::Gpui(h)),
-                    Err(e) => eprintln!("[glide] failed to open overlay window: {e}"),
+                    Err(e) => tracing::error!("failed to open overlay window: {e}"),
                 }
             }
         }

@@ -66,9 +66,7 @@ impl PersistentHelperClient {
             match result {
                 Ok(response) => return Ok(response),
                 Err(error) if attempt == 0 && is_transport_error(error.as_ref()) => {
-                    eprintln!(
-                        "[glide] Apple helper: persistent server failed, restarting: {error:#}"
-                    );
+                    tracing::warn!("Apple helper: persistent server failed, restarting: {error:#}");
                     self.stop_server();
                 }
                 Err(error) => return Err(error),
@@ -101,8 +99,8 @@ impl PersistentHelperClient {
             .take()
             .context("failed to open persistent Apple helper stdout")?;
 
-        eprintln!(
-            "[glide] Apple helper: started persistent server at {}",
+        tracing::info!(
+            "Apple helper: started persistent server at {}",
             self.helper.display()
         );
         self.server = Some(PersistentHelperServer {

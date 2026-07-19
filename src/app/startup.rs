@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub fn run() {
+    crate::logging::init();
     let app = Application::new().with_assets(gpui_component_assets::Assets);
 
     // Reopen settings after startup; no-op while config recovery is active.

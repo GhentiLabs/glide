@@ -59,6 +59,11 @@ bzip2 = "0.5"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
+# Logging to ~/Library/Logs/Glide
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 # Config persistence + secure credential storage
 confy = "0.6"
 keyring = { version = "3", features = ["apple-native"] }

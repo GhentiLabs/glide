@@ -54,8 +54,8 @@ fn fetch_elevenlabs_scribe_models(
             if user_verified {
                 append_elevenlabs_scribe_models(stt, Vec::new());
             } else {
-                eprintln!(
-                    "[glide] ElevenLabs: failed to verify API key via {models_url}: {models_error:#}"
+                tracing::warn!(
+                    "ElevenLabs: failed to verify API key via {models_url}: {models_error:#}"
                 );
             }
         }
@@ -82,9 +82,7 @@ fn parse_elevenlabs_models(
     response
         .json::<Vec<ElevenLabsModelsResponseEntry>>()
         .unwrap_or_else(|error| {
-            eprintln!(
-                "[glide] ElevenLabs: failed to parse model list from {models_url}: {error:#}"
-            );
+            tracing::warn!("ElevenLabs: failed to parse model list from {models_url}: {error:#}");
             Vec::new()
         })
 }
