@@ -3,67 +3,91 @@ use std::collections::HashSet;
 use anyhow::{Context, Result};
 
 use glide::benchmark_support::{
-    LLM_REMOTE_DEFAULTS, Provider, ProvidersConfig, STT_REMOTE_DEFAULTS, known_remote_llm_models,
-    known_remote_stt_models,
+    LLM_REMOTE_DEFAULTS, ModelInfo, Provider, ProvidersConfig, STT_REMOTE_DEFAULTS,
+    known_remote_llm_models, known_remote_stt_models,
 };
 
-/// Providers to verify, with the env var holding their API key and whether
-/// their `/models` response authoritatively lists every live model. Fireworks
-/// omits serverless models from `/models`, so absence there is reported but
-/// not failed. ElevenLabs has no OpenAI-compatible listing and is not checked.
-const CHECKS: &[(Provider, &str, bool)] = &[
-    (Provider::Groq, "GROQ_API_KEY", true),
-    (Provider::OpenAi, "OPENAI_API_KEY", true),
-    (Provider::Cerebras, "CEREBRAS_API_KEY", true),
-    (Provider::Fireworks, "FIREWORKS_API_KEY", false),
+struct ProviderCheck {
+    provider: Provider,
+    key_var: &'static str,
+    /// Whether a shipped model of this kind missing from the listing proves
+    /// decommission. Fireworks LLMs are verified via its control-plane
+    /// catalog, but its STT models exist only as audio-API parameters with no
+    /// listing anywhere. ElevenLabs has no compatible listing and is skipped.
+    llm_authoritative: bool,
+    stt_authoritative: bool,
+}
+
+const CHECKS: &[ProviderCheck] = &[
+    ProviderCheck {
+        provider: Provider::Groq,
+        key_var: "GROQ_API_KEY",
+        llm_authoritative: true,
+        stt_authoritative: true,
+    },
+    ProviderCheck {
+        provider: Provider::OpenAi,
+        key_var: "OPENAI_API_KEY",
+        llm_authoritative: true,
+        stt_authoritative: true,
+    },
+    ProviderCheck {
+        provider: Provider::Cerebras,
+        key_var: "CEREBRAS_API_KEY",
+        llm_authoritative: true,
+        stt_authoritative: true,
+    },
+    ProviderCheck {
+        provider: Provider::Fireworks,
+        key_var: "FIREWORKS_API_KEY",
+        llm_authoritative: true,
+        stt_authoritative: false,
+    },
 ];
+
+const FIREWORKS_CATALOG_URL: &str = "https://api.fireworks.ai/v1/accounts/fireworks/models";
 
 pub(super) fn run_check_models() -> Result<()> {
     let providers = ProvidersConfig::default();
     let mut failures = Vec::new();
     let mut checked = 0;
 
-    for &(provider, key_var, authoritative) in CHECKS {
-        let Ok(api_key) = std::env::var(key_var) else {
-            println!("{}: skipped ({key_var} not set)", provider.label());
+    for check in CHECKS {
+        let label = check.provider.label();
+        let Ok(api_key) = std::env::var(check.key_var) else {
+            println!("{label}: skipped ({} not set)", check.key_var);
             continue;
         };
 
-        let base_url = &providers.credentials_for(provider).base_url;
-        let available = match fetch_model_ids(base_url, &api_key) {
-            Ok(available) => available,
-            // Listing failures (e.g. Fireworks returns 412 for suspended
-            // accounts) are only fatal where the listing is authoritative;
-            // see CHECKS.
-            Err(error) if !authoritative => {
-                println!("{}: listing unavailable: {error:#}", provider.label());
-                continue;
-            }
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("failed to list {} models", provider.label()));
-            }
-        };
+        let available = fetch_available_models(check.provider, &providers, &api_key)
+            .with_context(|| format!("failed to list {label} models"))?;
         checked += 1;
 
-        let missing = missing_models(&shipped_models(provider), &available);
-        if missing.is_empty() {
-            println!(
-                "{}: all shipped models live ({} models listed)",
-                provider.label(),
-                available.len()
-            );
-        } else if authoritative {
-            println!(
-                "{}: MISSING from live catalog: {missing:?}",
-                provider.label()
-            );
-            failures.push((provider.label(), missing));
-        } else {
-            println!(
-                "{}: not in /models (non-authoritative listing): {missing:?}",
-                provider.label()
-            );
+        let kinds = [
+            (
+                "LLM",
+                shipped_llm_models(check.provider),
+                check.llm_authoritative,
+            ),
+            (
+                "STT",
+                shipped_stt_models(check.provider),
+                check.stt_authoritative,
+            ),
+        ];
+        for (kind, shipped, authoritative) in kinds {
+            if shipped.is_empty() {
+                continue;
+            }
+            let missing = missing_models(&shipped, &available);
+            if missing.is_empty() {
+                println!("{label} {kind}: all {} shipped models live", shipped.len());
+            } else if authoritative {
+                println!("{label} {kind}: MISSING from live catalog: {missing:?}");
+                failures.push((label, kind, missing));
+            } else {
+                println!("{label} {kind}: not listed (unverifiable kind): {missing:?}");
+            }
         }
     }
 
@@ -80,17 +104,25 @@ pub(super) fn run_check_models() -> Result<()> {
     Ok(())
 }
 
-/// Every model id Glide ships for `provider`: smart defaults plus the
-/// pre-fetch picker fallback.
-pub(super) fn shipped_models(provider: Provider) -> Vec<String> {
-    let defaults = STT_REMOTE_DEFAULTS
+pub(super) fn shipped_llm_models(provider: Provider) -> Vec<String> {
+    shipped_for(provider, LLM_REMOTE_DEFAULTS, known_remote_llm_models())
+}
+
+pub(super) fn shipped_stt_models(provider: Provider) -> Vec<String> {
+    shipped_for(provider, STT_REMOTE_DEFAULTS, known_remote_stt_models())
+}
+
+fn shipped_for(
+    provider: Provider,
+    defaults: &[(Provider, &str)],
+    known: Vec<ModelInfo>,
+) -> Vec<String> {
+    let defaults = defaults
         .iter()
-        .chain(LLM_REMOTE_DEFAULTS)
         .filter(|(candidate, _)| *candidate == provider)
         .map(|(_, model)| (*model).to_string());
-    let known = known_remote_stt_models()
+    let known = known
         .into_iter()
-        .chain(known_remote_llm_models())
         .filter(|info| info.provider == provider.label())
         .map(|info| info.id);
 
@@ -108,7 +140,18 @@ pub(super) fn missing_models(shipped: &[String], available: &HashSet<String>) ->
         .collect()
 }
 
-fn fetch_model_ids(base_url: &str, api_key: &str) -> Result<HashSet<String>> {
+fn fetch_available_models(
+    provider: Provider,
+    providers: &ProvidersConfig,
+    api_key: &str,
+) -> Result<HashSet<String>> {
+    match provider {
+        Provider::Fireworks => fetch_fireworks_catalog(api_key),
+        _ => fetch_openai_models(&providers.credentials_for(provider).base_url, api_key),
+    }
+}
+
+fn fetch_openai_models(base_url: &str, api_key: &str) -> Result<HashSet<String>> {
     #[derive(serde::Deserialize)]
     struct ModelsResponse {
         data: Vec<ModelsEntry>,
@@ -119,14 +162,54 @@ fn fetch_model_ids(base_url: &str, api_key: &str) -> Result<HashSet<String>> {
     }
 
     let url = format!("{}/models", base_url.trim_end_matches('/'));
-    let response = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?
+    let parsed: ModelsResponse = http_client()?
         .get(&url)
         .bearer_auth(api_key)
         .send()?
-        .error_for_status()?;
-
-    let parsed: ModelsResponse = response.json()?;
+        .error_for_status()?
+        .json()?;
     Ok(parsed.data.into_iter().map(|entry| entry.id).collect())
+}
+
+/// Fireworks' OpenAI-compatible `/models` omits serverless models, so shipped
+/// ids are checked against the paginated control-plane catalog instead.
+fn fetch_fireworks_catalog(api_key: &str) -> Result<HashSet<String>> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CatalogResponse {
+        #[serde(default)]
+        models: Vec<CatalogEntry>,
+        #[serde(default)]
+        next_page_token: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct CatalogEntry {
+        name: String,
+    }
+
+    let client = http_client()?;
+    let mut names = HashSet::new();
+    let mut page_token: Option<String> = None;
+    for _ in 0..20 {
+        let mut request = client
+            .get(FIREWORKS_CATALOG_URL)
+            .query(&[("pageSize", "200")])
+            .bearer_auth(api_key);
+        if let Some(token) = &page_token {
+            request = request.query(&[("pageToken", token.as_str())]);
+        }
+        let parsed: CatalogResponse = request.send()?.error_for_status()?.json()?;
+        names.extend(parsed.models.into_iter().map(|entry| entry.name));
+        page_token = parsed.next_page_token.filter(|token| !token.is_empty());
+        if page_token.is_none() {
+            break;
+        }
+    }
+    Ok(names)
+}
+
+fn http_client() -> Result<reqwest::blocking::Client> {
+    Ok(reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?)
 }
