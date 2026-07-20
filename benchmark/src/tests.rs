@@ -251,16 +251,22 @@ fn base_url_redaction_keeps_only_host() {
 }
 
 #[test]
-fn shipped_models_include_defaults_and_fallback_for_groq() {
-    let models = shipped_models(Provider::Groq);
+fn shipped_models_split_defaults_and_fallback_by_kind() {
+    let llm = shipped_llm_models(Provider::Groq);
+    assert!(llm.contains(&"llama-3.3-70b-versatile".to_string()));
+    assert!(llm.contains(&"openai/gpt-oss-20b".to_string()));
+    assert!(!llm.contains(&"whisper-large-v3-turbo".to_string()));
 
-    assert!(models.contains(&"llama-3.3-70b-versatile".to_string()));
-    assert!(models.contains(&"whisper-large-v3-turbo".to_string()));
-    assert!(models.contains(&"openai/gpt-oss-20b".to_string()));
+    let stt = shipped_stt_models(Provider::Groq);
+    assert!(stt.contains(&"whisper-large-v3-turbo".to_string()));
+    assert!(!stt.contains(&"llama-3.3-70b-versatile".to_string()));
 
-    let mut deduped = models.clone();
+    let fireworks_llm = shipped_llm_models(Provider::Fireworks);
+    assert!(fireworks_llm.contains(&"accounts/fireworks/models/gpt-oss-20b".to_string()));
+
+    let mut deduped = llm.clone();
     deduped.dedup();
-    assert_eq!(models, deduped);
+    assert_eq!(llm, deduped);
 }
 
 #[test]
