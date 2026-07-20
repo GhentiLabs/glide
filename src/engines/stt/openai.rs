@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::{
     audio::AudioFormat,
     config::{Provider, ProvidersConfig},
+    engines::net,
 };
 
 pub struct OpenAiSttProvider {
@@ -34,7 +35,7 @@ impl OpenAiSttProvider {
         };
         Ok(Self {
             provider,
-            client: Client::new(),
+            client: net::client(net::STT_TIMEOUT)?,
             endpoint,
             default_model: model.to_string(),
             api_key,
@@ -80,14 +81,13 @@ struct OpenAiTranscriptionResponse {
 #[async_trait::async_trait]
 impl super::SttProvider for OpenAiSttProvider {
     async fn transcribe(&self, audio: &[u8], format: AudioFormat) -> Result<String> {
-        let form = self.request_form(audio, format)?;
-        let response = self
-            .authenticated_request(form)
-            .send()
-            .await
-            .context("failed to call transcription API")?
-            .error_for_status()
-            .context("transcription API returned an error status")?;
+        let response = net::send_with_retry(
+            || Ok(self.authenticated_request(self.request_form(audio, format)?)),
+            "transcription API",
+        )
+        .await?
+        .error_for_status()
+        .context("transcription API returned an error status")?;
 
         let parsed: OpenAiTranscriptionResponse = response
             .json()

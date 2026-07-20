@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::{
     audio::AudioFormat,
     config::{Provider, ProvidersConfig},
+    engines::net,
 };
 
 pub struct ElevenLabsSttProvider {
@@ -20,7 +21,7 @@ impl ElevenLabsSttProvider {
         let api_key = creds.resolve_api_key("ElevenLabs speech-to-text")?;
         let endpoint = Provider::ElevenLabs.stt_endpoint(&creds.base_url);
         Ok(Self {
-            client: Client::new(),
+            client: net::client(net::STT_TIMEOUT)?,
             endpoint,
             model: model.to_string(),
             api_key,
@@ -52,18 +53,19 @@ struct ElevenLabsTranscriptionResponse {
 #[async_trait::async_trait]
 impl super::SttProvider for ElevenLabsSttProvider {
     async fn transcribe(&self, audio: &[u8], format: AudioFormat) -> Result<String> {
-        let form = self.request_form(audio, format)?;
-
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .header("xi-api-key", &self.api_key)
-            .multipart(form)
-            .send()
-            .await
-            .context("failed to call ElevenLabs speech-to-text API")?
-            .error_for_status()
-            .context("ElevenLabs speech-to-text API returned an error status")?;
+        let response = net::send_with_retry(
+            || {
+                Ok(self
+                    .client
+                    .post(&self.endpoint)
+                    .header("xi-api-key", &self.api_key)
+                    .multipart(self.request_form(audio, format)?))
+            },
+            "ElevenLabs speech-to-text API",
+        )
+        .await?
+        .error_for_status()
+        .context("ElevenLabs speech-to-text API returned an error status")?;
 
         let parsed: ElevenLabsTranscriptionResponse = response
             .json()

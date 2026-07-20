@@ -139,13 +139,16 @@ async fn sends_low_reasoning_effort_for_gpt_oss_models() {
 }
 #[tokio::test]
 async fn preserves_error_status_and_body() {
-    for (status_line, expected_status) in [
-        ("400 Bad Request", "400 Bad Request"),
-        ("401 Unauthorized", "401 Unauthorized"),
-        ("429 Too Many Requests", "429 Too Many Requests"),
+    // 429 is transient, so the client retries once and the server must serve
+    // two connections; 4xx errors are permanent and get exactly one.
+    for (status_line, expected_status, connections) in [
+        ("400 Bad Request", "400 Bad Request", 1),
+        ("401 Unauthorized", "401 Unauthorized", 1),
+        ("429 Too Many Requests", "429 Too Many Requests", 2),
     ] {
         let body = r#"{"error":{"message":"Unsupported value: temperature"}}"#;
-        let Some(server) = MockHttpServer::try_spawn_status(status_line, body) else {
+        let Some(server) = MockHttpServer::try_spawn_status_times(status_line, body, connections)
+        else {
             eprintln!("skipping mock server test because loopback sockets are unavailable");
             return;
         };
@@ -210,20 +213,35 @@ impl MockHttpServer {
     }
 
     fn try_spawn_status(status_line: &'static str, body: &'static str) -> Option<Self> {
+        Self::try_spawn_status_times(status_line, body, 1)
+    }
+
+    /// Serves the same response to exactly `connections` sequential
+    /// connections; `join` returns the first request.
+    fn try_spawn_status_times(
+        status_line: &'static str,
+        body: &'static str,
+        connections: usize,
+    ) -> Option<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").ok()?;
         let addr = listener.local_addr().unwrap();
         let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 65536];
-            let bytes = stream.read(&mut request).unwrap_or(0);
-            let request = String::from_utf8_lossy(&request[..bytes]).to_string();
-            let response = format!(
-                "HTTP/1.1 {status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-            request
+            let mut first_request = String::new();
+            for connection in 0..connections {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 65536];
+                let bytes = stream.read(&mut request).unwrap_or(0);
+                if connection == 0 {
+                    first_request = String::from_utf8_lossy(&request[..bytes]).to_string();
+                }
+                let response = format!(
+                    "HTTP/1.1 {status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+            first_request
         });
 
         Some(Self {
