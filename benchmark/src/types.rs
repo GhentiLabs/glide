@@ -11,6 +11,7 @@ pub enum BenchCommand {
     Flow(FlowBenchOptions),
     PromptEval(PromptEvalOptions),
     Compare(CompareOptions),
+    CheckModels,
     Help,
 }
 

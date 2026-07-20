@@ -51,6 +51,7 @@ pub fn run_cli() -> Result<()> {
                 );
             }
         }
+        BenchCommand::CheckModels => super::check_models::run_check_models()?,
         BenchCommand::Help => print_usage(),
     }
     Ok(())
@@ -77,6 +78,7 @@ where
         "flow" => parse_flow_args(args).map(BenchCommand::Flow),
         "prompt-eval" => parse_prompt_eval_args(args).map(BenchCommand::PromptEval),
         "compare" => parse_compare_args(args).map(BenchCommand::Compare),
+        "check-models" => Ok(BenchCommand::CheckModels),
         other => anyhow::bail!("unknown glide-bench command '{other}'\n\n{}", usage()),
     }
 }
@@ -414,5 +416,6 @@ fn usage() -> &'static str {
   glide-bench llm --text <text|@file|file> --provider <openai|groq|cerebras|fireworks|apple_local> --model <id> [--runs N] [--warmups N] [--output path]
   glide-bench flow --audio <wav> [--target-app name] [--style name|default] [--runs N] [--warmups N] [--paste|--no-paste] [--output path]
   glide-bench prompt-eval --suite <jsonl> --candidate <provider:model> [--candidate <provider:model> ...] [--runs N] [--timeout-secs N] [--output path]
-  glide-bench compare --baseline <json> --candidate <json> [--fail-threshold percent]"
+  glide-bench compare --baseline <json> --candidate <json> [--fail-threshold percent]
+  glide-bench check-models  (verify shipped default models against provider /models; reads GROQ_API_KEY, OPENAI_API_KEY, CEREBRAS_API_KEY, FIREWORKS_API_KEY)"
 }

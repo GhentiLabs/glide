@@ -249,3 +249,28 @@ fn base_url_redaction_keeps_only_host() {
     );
     assert_eq!(redacted_base_url_host("  ").as_deref(), None);
 }
+
+#[test]
+fn shipped_models_include_defaults_and_fallback_for_groq() {
+    let models = shipped_models(Provider::Groq);
+
+    assert!(models.contains(&"llama-3.3-70b-versatile".to_string()));
+    assert!(models.contains(&"whisper-large-v3-turbo".to_string()));
+    assert!(models.contains(&"openai/gpt-oss-20b".to_string()));
+
+    let mut deduped = models.clone();
+    deduped.dedup();
+    assert_eq!(models, deduped);
+}
+
+#[test]
+fn missing_models_reports_only_absent_ids() {
+    let shipped = vec!["kept".to_string(), "gone".to_string()];
+    let available = std::collections::HashSet::from(["kept".to_string(), "extra".to_string()]);
+
+    assert_eq!(
+        missing_models(&shipped, &available),
+        vec!["gone".to_string()]
+    );
+    assert!(missing_models(&shipped[..1], &available).is_empty());
+}

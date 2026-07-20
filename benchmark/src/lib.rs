@@ -1,3 +1,4 @@
+mod check_models;
 mod cli;
 mod compare;
 mod prompt_eval;
@@ -19,6 +20,8 @@ pub use types::{
 
 const REPORT_SCHEMA_VERSION: u8 = 1;
 
+#[cfg(test)]
+use check_models::{missing_models, shipped_models};
 #[cfg(test)]
 use cli::parse_prompt_eval_candidate;
 #[cfg(test)]

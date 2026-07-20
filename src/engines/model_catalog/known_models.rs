@@ -8,7 +8,7 @@ use crate::config::Provider;
 use super::catalog::{model_info, model_info_with_display};
 use super::types::ModelInfo;
 
-pub(super) const STT_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
+pub const STT_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
     (Provider::Groq, "whisper-large-v3-turbo"),
     (Provider::OpenAi, "whisper-1"),
     (Provider::Fireworks, "whisper-v3-turbo"),
@@ -22,7 +22,7 @@ pub const LLM_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
     (Provider::Cerebras, "gpt-oss-120b"),
 ];
 
-pub(super) fn known_remote_stt_models() -> Vec<ModelInfo> {
+pub fn known_remote_stt_models() -> Vec<ModelInfo> {
     vec![
         model_info(Provider::OpenAi, "whisper-1", false),
         model_info(Provider::Groq, "whisper-large-v3", false),
@@ -34,7 +34,7 @@ pub(super) fn known_remote_stt_models() -> Vec<ModelInfo> {
     ]
 }
 
-pub(super) fn known_remote_llm_models() -> Vec<ModelInfo> {
+pub fn known_remote_llm_models() -> Vec<ModelInfo> {
     vec![
         model_info(Provider::OpenAi, "gpt-5.4-nano", false),
         model_info(Provider::OpenAi, "gpt-4o-mini", false),
