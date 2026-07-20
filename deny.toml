@@ -1,0 +1,11 @@
+# cargo-deny configuration; CI runs `cargo deny check advisories`.
+
+[graph]
+# Glide ships only on macOS; advisories in other targets' dependency trees
+# (e.g. gpui's Wayland path) never reach a shipped binary.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+
+[advisories]
+# Unmaintained transitive dependencies are pinned by gpui upstream and not
+# actionable here; direct workspace dependencies still fail the check.
+unmaintained = "workspace"
