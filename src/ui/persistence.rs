@@ -59,8 +59,11 @@ impl SettingsApp {
         initial_generation: u64,
         cx: &gpui::Context<Self>,
     ) {
+        // Worst case is 6 sequential requests at the 10s client timeout: one
+        // GET per provider (4) plus ElevenLabs's models+user fallback pair
+        // (2) = 60s; 280 x 250ms = 70s adds slack. Bump if a provider is added.
         cx.spawn(async move |this, cx| {
-            for _ in 0..60 {
+            for _ in 0..280 {
                 if crate::engines::model_catalog::fetch_generation() != initial_generation {
                     break;
                 }
