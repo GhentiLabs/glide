@@ -5,7 +5,11 @@ use crate::{
     engines::model_assets::{self, ParakeetInstallState},
 };
 
-use super::{types::ModelInfo, verification::provider_verified};
+use super::{
+    known_models::{known_remote_llm_models, known_remote_stt_models},
+    types::ModelInfo,
+    verification::provider_verified,
+};
 
 pub(super) static CACHED_STT_MODELS: OnceLock<Mutex<Vec<ModelInfo>>> = OnceLock::new();
 pub(super) static CACHED_LLM_MODELS: OnceLock<Mutex<Vec<ModelInfo>>> = OnceLock::new();
@@ -16,6 +20,33 @@ pub fn cached_stt_models() -> Vec<ModelInfo> {
 
 pub fn cached_llm_models() -> Vec<ModelInfo> {
     cached_models(&CACHED_LLM_MODELS, fallback_llm_models, local_llm_models)
+}
+
+/// Whether the live-fetched catalog lists `model` for `provider`; `None` when
+/// nothing has been fetched for the provider.
+pub(super) fn stt_model_in_live_catalog(provider: Provider, model: &str) -> Option<bool> {
+    live_catalog_contains(&CACHED_STT_MODELS, provider, model)
+}
+
+pub(super) fn llm_model_in_live_catalog(provider: Provider, model: &str) -> Option<bool> {
+    live_catalog_contains(&CACHED_LLM_MODELS, provider, model)
+}
+
+fn live_catalog_contains(
+    cache: &OnceLock<Mutex<Vec<ModelInfo>>>,
+    provider: Provider,
+    model: &str,
+) -> Option<bool> {
+    let label = provider.label();
+    let locked = cache.get_or_init(|| Mutex::new(Vec::new())).lock().unwrap();
+    let mut saw_provider = false;
+    for info in locked.iter().filter(|info| info.provider == label) {
+        if info.id == model {
+            return Some(true);
+        }
+        saw_provider = true;
+    }
+    saw_provider.then_some(false)
 }
 
 pub(super) fn fallback_stt_models() -> Vec<ModelInfo> {
@@ -44,49 +75,6 @@ fn cached_models(
         models.extend(local());
         filter_models_by_verified_providers(models)
     }
-}
-
-// I don't like really doing these known models but it will keep it somewhat
-// robust if the providers change their API spec for model retreival.
-fn known_remote_stt_models() -> Vec<ModelInfo> {
-    vec![
-        model_info(Provider::OpenAi, "whisper-1", false),
-        model_info(Provider::Groq, "whisper-large-v3", false),
-        model_info(Provider::Groq, "whisper-large-v3-turbo", false),
-        model_info(Provider::Fireworks, "whisper-v3-turbo", false),
-        model_info(Provider::Fireworks, "whisper-v3", false),
-        model_info_with_display(Provider::ElevenLabs, "scribe_v2", "Scribe v2", false),
-        model_info_with_display(Provider::ElevenLabs, "scribe_v1", "Scribe v1", false),
-    ]
-}
-
-fn known_remote_llm_models() -> Vec<ModelInfo> {
-    vec![
-        model_info(Provider::OpenAi, "gpt-5.4-nano", false),
-        model_info(Provider::OpenAi, "gpt-4o-mini", false),
-        model_info(Provider::OpenAi, "gpt-4o", false),
-        model_info(Provider::OpenAi, "gpt-4-turbo", false),
-        model_info(
-            Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            false,
-        ),
-        model_info(Provider::Groq, "llama-3.3-70b-versatile", false),
-        model_info(Provider::Groq, "llama-3.1-8b-instant", false),
-        model_info(Provider::Groq, "mixtral-8x7b-32768", false),
-        model_info(
-            Provider::Fireworks,
-            "accounts/fireworks/models/gpt-oss-20b",
-            false,
-        ),
-        model_info(
-            Provider::Fireworks,
-            "accounts/fireworks/models/gpt-oss-120b",
-            false,
-        ),
-        model_info(Provider::Cerebras, "gpt-oss-120b", false),
-        model_info(Provider::Cerebras, "llama-4-scout-17b-16e-instruct", false),
-    ]
 }
 
 fn local_stt_models() -> Vec<ModelInfo> {

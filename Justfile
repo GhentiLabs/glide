@@ -137,7 +137,7 @@ bench-compare baseline candidate threshold="20":
 
 # Run the live prompt eval suite against the default remote LLM candidates.
 prompt-eval-core runs="1" timeout_secs="60":
-    cargo run --bin glide-bench -- prompt-eval --suite "{{ROOT}}/fixtures/prompt_eval/core.jsonl" --candidate "openai:gpt-5.4-nano" --candidate "groq:meta-llama/llama-4-scout-17b-16e-instruct" --candidate "cerebras:gpt-oss-120b" --candidate "fireworks:accounts/fireworks/models/gpt-oss-20b" --runs "{{runs}}" --timeout-secs "{{timeout_secs}}"
+    cargo run --bin glide-bench -- prompt-eval --suite "{{ROOT}}/fixtures/prompt_eval/core.jsonl" --runs "{{runs}}" --timeout-secs "{{timeout_secs}}"
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
 

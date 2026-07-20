@@ -85,7 +85,7 @@ fn parses_prompt_eval_cli_command() {
         "--candidate",
         "openai:gpt-5.4-nano",
         "--candidate",
-        "groq:meta-llama/llama-4-scout-17b-16e-instruct",
+        "groq:llama-3.3-70b-versatile",
         "--runs",
         "2",
         "--timeout-secs",
@@ -107,11 +107,38 @@ fn parses_prompt_eval_cli_command() {
                     .iter()
                     .map(|candidate| candidate.model.as_str())
                     .collect::<Vec<_>>(),
-                vec!["gpt-5.4-nano", "meta-llama/llama-4-scout-17b-16e-instruct",]
+                vec!["gpt-5.4-nano", "llama-3.3-70b-versatile",]
             );
             assert_eq!(options.runs, 2);
             assert_eq!(options.timeout_secs, 15);
             assert_eq!(options.output.unwrap().to_string_lossy(), "report.json");
+        }
+        other => panic!("expected prompt-eval command, got {other:?}"),
+    }
+}
+
+#[test]
+fn prompt_eval_defaults_to_remote_default_candidates() {
+    let command = parse_cli_args([
+        "glide-bench",
+        "prompt-eval",
+        "--suite",
+        "fixtures/prompt_eval/core.jsonl",
+    ])
+    .unwrap();
+
+    match command {
+        BenchCommand::PromptEval(options) => {
+            let expected: Vec<_> = glide::benchmark_support::LLM_REMOTE_DEFAULTS
+                .iter()
+                .map(|(provider, model)| (*provider, *model))
+                .collect();
+            let actual: Vec<_> = options
+                .candidates
+                .iter()
+                .map(|candidate| (candidate.provider, candidate.model.as_str()))
+                .collect();
+            assert_eq!(actual, expected);
         }
         other => panic!("expected prompt-eval command, got {other:?}"),
     }

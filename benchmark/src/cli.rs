@@ -224,10 +224,9 @@ fn parse_prompt_eval_args(mut args: VecDeque<String>) -> Result<PromptEvalOption
         }
     }
 
-    anyhow::ensure!(
-        !candidates.is_empty(),
-        "missing required --candidate; pass one or more provider:model values"
-    );
+    if candidates.is_empty() {
+        candidates = default_prompt_eval_candidates();
+    }
 
     Ok(PromptEvalOptions {
         suite: suite.context("missing required --suite")?,
@@ -286,6 +285,16 @@ fn parse_provider(raw: &str) -> Result<Provider> {
         "parakeet" => Ok(Provider::Parakeet),
         other => anyhow::bail!("unknown provider '{other}'"),
     }
+}
+
+fn default_prompt_eval_candidates() -> Vec<PromptEvalCandidate> {
+    glide::benchmark_support::LLM_REMOTE_DEFAULTS
+        .iter()
+        .map(|(provider, model)| PromptEvalCandidate {
+            provider: *provider,
+            model: (*model).to_string(),
+        })
+        .collect()
 }
 
 pub(super) fn parse_prompt_eval_candidate(raw: &str) -> Result<PromptEvalCandidate> {
