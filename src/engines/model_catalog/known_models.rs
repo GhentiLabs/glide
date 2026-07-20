@@ -54,6 +54,5 @@ pub fn known_remote_llm_models() -> Vec<ModelInfo> {
             false,
         ),
         model_info(Provider::Cerebras, "gpt-oss-120b", false),
-        model_info(Provider::Cerebras, "llama-4-scout-17b-16e-instruct", false),
     ]
 }
