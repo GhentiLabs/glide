@@ -30,8 +30,20 @@ pub(super) fn run_check_models() -> Result<()> {
         };
 
         let base_url = &providers.credentials_for(provider).base_url;
-        let available = fetch_model_ids(base_url, &api_key)
-            .with_context(|| format!("failed to list {} models", provider.label()))?;
+        let available = match fetch_model_ids(base_url, &api_key) {
+            Ok(available) => available,
+            // Listing failures (e.g. Fireworks returns 412 for suspended
+            // accounts) are only fatal where the listing is authoritative;
+            // see CHECKS.
+            Err(error) if !authoritative => {
+                println!("{}: listing unavailable: {error:#}", provider.label());
+                continue;
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to list {} models", provider.label()));
+            }
+        };
         checked += 1;
 
         let missing = missing_models(&shipped_models(provider), &available);
