@@ -5,8 +5,9 @@ use std::{
     thread,
 };
 
-/// Serves each response to one connection in order, then exits. Panics (test
-/// hang) if the client makes fewer connections than there are responses.
+/// Serves each response to one connection in order, then exits. Blocks in
+/// accept (hanging the test) if the client connects fewer times than there
+/// are responses.
 struct SequenceServer {
     url: String,
     handle: thread::JoinHandle<usize>,
@@ -50,7 +51,7 @@ async fn returns_first_success_without_retry() {
         eprintln!("skipping: loopback sockets unavailable");
         return;
     };
-    let client = client(LLM_TIMEOUT);
+    let client = client(LLM_TIMEOUT).unwrap();
 
     let response = send_with_retry(|| Ok(client.get(&server.url)), "test API")
         .await
@@ -69,7 +70,7 @@ async fn retries_once_on_server_error_then_succeeds() {
         eprintln!("skipping: loopback sockets unavailable");
         return;
     };
-    let client = client(LLM_TIMEOUT);
+    let client = client(LLM_TIMEOUT).unwrap();
 
     let response = send_with_retry(|| Ok(client.get(&server.url)), "test API")
         .await
@@ -88,7 +89,7 @@ async fn retries_once_on_rate_limit_and_returns_second_outcome() {
         eprintln!("skipping: loopback sockets unavailable");
         return;
     };
-    let client = client(LLM_TIMEOUT);
+    let client = client(LLM_TIMEOUT).unwrap();
 
     let response = send_with_retry(|| Ok(client.get(&server.url)), "test API")
         .await
@@ -104,7 +105,7 @@ async fn does_not_retry_permanent_client_errors() {
         eprintln!("skipping: loopback sockets unavailable");
         return;
     };
-    let client = client(LLM_TIMEOUT);
+    let client = client(LLM_TIMEOUT).unwrap();
 
     let response = send_with_retry(|| Ok(client.get(&server.url)), "test API")
         .await
@@ -127,7 +128,7 @@ async fn retries_on_connect_error() {
         };
         listener.local_addr().unwrap().port()
     };
-    let client = client(LLM_TIMEOUT);
+    let client = client(LLM_TIMEOUT).unwrap();
     let url = format!("http://127.0.0.1:{port}/");
 
     let error = send_with_retry(|| Ok(client.get(&url)), "test API")

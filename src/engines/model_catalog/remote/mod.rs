@@ -53,14 +53,20 @@ pub fn fetch_all_models(providers: &ProvidersConfig, on_complete: impl FnOnce() 
     let remote_credentials = remote_credentials(providers);
 
     std::thread::spawn(move || {
-        let client = build_models_client();
-        let mut discovered = DiscoveredModels::default();
+        // A client without its timeout would hang this thread indefinitely on
+        // a dead connection; skip the fetch instead (providers stay
+        // unverified) and still unblock completion-callback consumers.
+        if let Ok(client) = build_models_client() {
+            let mut discovered = DiscoveredModels::default();
 
-        openai::fetch_openai_compatible_models(&client, &remote_credentials, &mut discovered);
-        elevenlabs::fetch_elevenlabs_models(&client, &remote_credentials, &mut discovered);
+            openai::fetch_openai_compatible_models(&client, &remote_credentials, &mut discovered);
+            elevenlabs::fetch_elevenlabs_models(&client, &remote_credentials, &mut discovered);
 
-        discovered.sort();
-        discovered.publish();
+            discovered.sort();
+            discovered.publish();
+        } else {
+            eprintln!("model fetch skipped: failed to build HTTP client");
+        }
         on_complete();
         FETCH_GENERATION.fetch_add(1, Ordering::AcqRel);
     });
@@ -73,11 +79,10 @@ fn remote_credentials(providers: &ProvidersConfig) -> Vec<(Provider, ProviderCre
         .collect()
 }
 
-fn build_models_client() -> reqwest::blocking::Client {
+fn build_models_client() -> reqwest::Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
-        .unwrap_or_else(|_| reqwest::blocking::Client::new())
 }
 
 pub(in crate::engines::model_catalog) fn excluded_remote_llm_model(

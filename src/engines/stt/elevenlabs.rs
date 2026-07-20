@@ -21,7 +21,7 @@ impl ElevenLabsSttProvider {
         let api_key = creds.resolve_api_key("ElevenLabs speech-to-text")?;
         let endpoint = Provider::ElevenLabs.stt_endpoint(&creds.base_url);
         Ok(Self {
-            client: net::client(net::STT_TIMEOUT),
+            client: net::client(net::STT_TIMEOUT)?,
             endpoint,
             model: model.to_string(),
             api_key,

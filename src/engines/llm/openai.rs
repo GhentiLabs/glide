@@ -27,7 +27,7 @@ impl OpenAiLlmProvider {
         let api_key = creds.resolve_api_key("LLM")?;
         let endpoint = provider.llm_endpoint(&creds.base_url);
         Ok(Self {
-            client: net::client(net::LLM_TIMEOUT),
+            client: net::client(net::LLM_TIMEOUT)?,
             provider,
             endpoint,
             model: model.to_string(),

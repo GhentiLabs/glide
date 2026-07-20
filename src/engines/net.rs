@@ -11,15 +11,17 @@ pub(crate) const STT_TIMEOUT: Duration = Duration::from_secs(60);
 
 const RETRY_DELAY: Duration = Duration::from_millis(500);
 
-pub(crate) fn client(timeout: Duration) -> Client {
+pub(crate) fn client(timeout: Duration) -> Result<Client> {
     Client::builder()
         .timeout(timeout)
         .build()
-        .unwrap_or_else(|_| Client::new())
+        .context("failed to build HTTP client")
 }
 
 /// Sends the request produced by `request`, retrying once after a short delay
-/// on transient failures: connect/timeout errors and 408/429/5xx responses.
+/// on transient failures: 408/429/5xx responses and any send error (reqwest
+/// cannot reliably separate permanent send failures from network flakes, and
+/// a wasted retry costs one delay where a missed one costs the dictation).
 /// `request` is a factory because request bodies (multipart uploads) cannot be
 /// cloned across attempts.
 pub(crate) async fn send_with_retry(

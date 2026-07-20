@@ -35,7 +35,7 @@ impl OpenAiSttProvider {
         };
         Ok(Self {
             provider,
-            client: net::client(net::STT_TIMEOUT),
+            client: net::client(net::STT_TIMEOUT)?,
             endpoint,
             default_model: model.to_string(),
             api_key,
