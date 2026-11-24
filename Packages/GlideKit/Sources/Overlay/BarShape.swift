@@ -38,6 +38,12 @@ public enum BarAnchor: String, CaseIterable, Sendable {
         return allCases.min { distance($0) < distance($1) }!
     }
 
+    /// The idle bar's length along the edge and thickness out of it: a tab on an edge, a little box in a corner.
+    var idleSize: (length: CGFloat, thickness: CGFloat) { isCorner ? (22, 22) : (44, 9) }
+
+    /// Whether each end of the bar stands clear of a screen corner; a clear end is rounded and flared.
+    var freeEnds: (start: Bool, end: Bool) { (!edges.contains(.leading) || isVertical, !edges.contains(.trailing) || isVertical) }
+
     /// The edge the bar grows out of.
     var edge: Edge {
         switch self {
@@ -63,6 +69,8 @@ struct EdgeTab: Shape {
     var flareStart: Bool
     var flareEnd: Bool
     var flare: CGFloat
+    /// Corner radius of the free corners; half the thickness when nil.
+    var radius: CGFloat?
 
     func path(in rect: CGRect) -> Path {
         guard let edge else { return Capsule().path(in: rect) }
@@ -70,7 +78,7 @@ struct EdgeTab: Shape {
         // Drawn as if growing up from the bottom edge, then turned to face the real one.
         let length = vertical ? rect.height : rect.width
         let h = vertical ? rect.width : rect.height
-        let r = h / 2
+        let r = min(radius ?? h / 2, h / 2)
         let x0 = flareStart ? flare : 0
         let x1 = length - (flareEnd ? flare : 0)
         var p = Path()

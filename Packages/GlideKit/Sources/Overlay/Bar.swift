@@ -8,6 +8,8 @@ public final class BarModel {
     public var state: SessionState = .idle {
         didSet {
             if state != oldValue { stateChanged = .now }
+            // A new dictation needs the space a popup sits in, and the user has moved on from it.
+            if state.isRecording, toast != nil { dismissToast() }
             if !isBusy { showNextPending() }
         }
     }
@@ -40,7 +42,9 @@ public final class BarModel {
     private(set) var stateChanged = Date.now
     @ObservationIgnored private var pending: [Toast] = []
     @ObservationIgnored private var lastLevelTime = Date.now
-    @ObservationIgnored private var lastHistoryTime = Date.now
+    /// How often a level joins `levels`.
+    static let historyStep: TimeInterval = 0.06
+    @ObservationIgnored private(set) var lastHistoryTime = Date.now
     @ObservationIgnored private var countdown: Task<Void, Never>?
 
     public init() {
@@ -65,7 +69,7 @@ public final class BarModel {
         let target = min(max((20 * log10(max(rms, 1e-5)) + 50) / 40, 0), 1)
         let tau = Float(target > level ? Tokens.levelAttack : Tokens.levelRelease)
         level += (target - level) * (1 - exp(-dt / tau))
-        if now.timeIntervalSince(lastHistoryTime) >= 0.06 {
+        if now.timeIntervalSince(lastHistoryTime) >= Self.historyStep {
             lastHistoryTime = now
             levels = Array((levels + [level]).suffix(6))
         }
@@ -170,7 +174,7 @@ public final class BarPanel {
     private static let long: CGFloat = 240
     private static let short: CGFloat = 52
     /// Fixed, with room for a long message; clicks pass through the transparent part.
-    private static let popupSize = NSSize(width: 340, height: 260)
+    private static let popupSize = NSSize(width: 304, height: 240)
 
     private let panel: NSPanel
     private let popup: NSPanel
@@ -224,7 +228,9 @@ public final class BarPanel {
             backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         panel.level = .statusBar  // above the menu bar, so the bar can sit on the top bezel
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        // Not `.stationary`: that ties the panel to the desktop, which macOS shrinks to 90% behind a full-screen Space,
+        // leaving the bar small, off the bezel and with its buttons out of line with the clicks meant for them.
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -269,19 +275,20 @@ public final class BarPanel {
         return NSRect(origin: origin, size: size)
     }
 
-    /// The popup sits on the screen side of the bar, kept on screen.
-    private func popupFrame(beside bar: NSRect, anchor: BarAnchor, on screen: NSScreen) -> NSRect {
+    /// The popup sits on the screen side of the bar, centred on `aimX` (the idle bar's centre) where the screen allows.
+    private func popupFrame(beside bar: NSRect, anchor: BarAnchor, aimX: CGFloat, on screen: NSScreen) -> NSRect {
         let size = Self.popupSize
-        let gap: CGFloat = 40
+        // Leaves the card just clear of the hovered bar (24 pt), so a tip's pointer ends near the idle one.
+        let gap: CGFloat = 16
         var origin: NSPoint
         switch anchor {
         case .left: origin = NSPoint(x: bar.minX + gap, y: bar.midY - size.height / 2)
         case .right: origin = NSPoint(x: bar.maxX - gap - size.width, y: bar.midY - size.height / 2)
-        case .top, .topLeft, .topRight: origin = NSPoint(x: bar.midX - size.width / 2, y: bar.maxY - gap - size.height)
-        default: origin = NSPoint(x: bar.midX - size.width / 2, y: bar.minY + gap)
+        case .top, .topLeft, .topRight: origin = NSPoint(x: aimX - size.width / 2, y: bar.maxY - gap - size.height)
+        default: origin = NSPoint(x: aimX - size.width / 2, y: bar.minY + gap)
         }
         let visible = area(of: screen)
-        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
+        origin.x = min(max(origin.x, visible.minX - 4), visible.maxX - size.width + 4)
         return NSRect(origin: origin, size: size)
     }
 
@@ -290,11 +297,11 @@ public final class BarPanel {
         dockShowing = Self.dockIsShowing
         let anchor = model.anchor
         let target = frame(for: anchor, on: screen)
-        let popupFrame = popupFrame(beside: target, anchor: anchor, on: screen)
+        let half = anchor.idleSize.length / 2
+        let aimX = anchor.edges.contains(.leading) ? target.minX + half : anchor.edges.contains(.trailing) ? target.maxX - half : target.midX
+        let popupFrame = popupFrame(beside: target, anchor: anchor, aimX: aimX, on: screen)
         popup.setFrame(popupFrame, display: true)
-        // The idle bar's centre sits about 30 pt in from a screen corner.
-        let barX = anchor.edges.contains(.leading) ? target.minX + 30 : anchor.edges.contains(.trailing) ? target.maxX - 30 : target.midX
-        model.pointerShift = anchor.isVertical ? 0 : barX - popupFrame.midX
+        model.pointerShift = anchor.isVertical ? 0 : aimX - popupFrame.midX
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.25
@@ -383,21 +390,30 @@ struct BarView: View {
     private var size: (length: CGFloat, thickness: CGFloat) {
         if hidden { return (32, 3) }
         switch model.state {
-        case .idle: return model.dragging ? (56, 22) : hovering ? (vertical ? 56 : 136, 24) : (44, 9)
+        case .idle: return model.dragging ? (56, 22) : hovering ? (vertical ? 56 : 136, 24) : place.idleSize
         case .initializing, .transcribing: return (148, 30)
-        case .recording(let handsFree): return handsFree ? (212, 36) : (148, 30)
+        case .recording(let handsFree): return handsFree ? (164, 36) : (148, 30)
         case .completed, .error: return (60, 24)
         }
     }
 
     private var edge: Edge? { model.dragging ? nil : place.edge }
 
+    /// In a corner the idle bar is a small box holding the mark.
+    private var isBox: Bool { model.state == .idle && !model.dragging && !hovering && !hidden && place.isCorner }
+
     private var shape: EdgeTab {
         // A flare where the bar meets the bezel, except at a screen corner, where that end sits flush.
-        let along: (start: Edge.Set.Element, end: Edge.Set.Element) = vertical ? (.top, .bottom) : (.leading, .trailing)
-        return EdgeTab(
-            edge: edge, flareStart: !place.edges.contains(along.start),
-            flareEnd: !place.edges.contains(along.end), flare: min(6, size.thickness / 2))
+        EdgeTab(
+            edge: edge, flareStart: place.freeEnds.start, flareEnd: place.freeEnds.end,
+            flare: min(6, size.thickness / 2), radius: isBox ? 7 : nil)
+    }
+
+    /// Keeps content centred on the bar's body, clear of the flares.
+    private var flareInsets: EdgeInsets {
+        guard edge != nil else { return EdgeInsets() }
+        let start = shape.flareStart ? shape.flare : 0, end = shape.flareEnd ? shape.flare : 0
+        return vertical ? EdgeInsets(top: start, leading: 0, bottom: end, trailing: 0) : EdgeInsets(top: 0, leading: start, bottom: 0, trailing: end)
     }
 
     private var flareRoom: CGFloat {
@@ -415,6 +431,7 @@ struct BarView: View {
         let vertical = vertical
         content
             .foregroundStyle(.white)
+            .padding(flareInsets)
             .frame(
                 width: vertical ? size.thickness : size.length + flareRoom,
                 height: vertical ? size.length + flareRoom : size.thickness)
@@ -470,14 +487,30 @@ struct BarView: View {
                     Text(hint).font(.system(size: 11, weight: .medium)).opacity(0.75).fixedSize()
                 }
                 .transition(.opacity)
+            } else if isBox {
+                CaretMark(caret: Tokens.tintGraphic).frame(height: 11).transition(.opacity)
             }
         case .initializing, .transcribing, .recording:
-            let stack = vertical ? AnyLayout(VStackLayout(spacing: 6)) : AnyLayout(HStackLayout(spacing: 6))
+            // Cancel and Stop sit in the bar's rounded ends, with the waveform centred between them.
+            let stack = vertical ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
             stack {
-                if handsFree { barButton("xmark", label: "Cancel", action: model.onCancel) }
+                if handsFree {
+                    barButton(label: "Cancel", action: model.onCancel) {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).opacity(0.75)
+                            .frame(width: 26, height: 26).background(Circle().fill(.white.opacity(0.1)))
+                    }
+                    Spacer(minLength: 0)
+                }
                 Waveform(model: model, vertical: vertical)
-                if handsFree { barButton("stop.fill", label: "Stop and insert", action: model.onStop) }
+                if handsFree {
+                    Spacer(minLength: 0)
+                    barButton(label: "Stop and insert", action: model.onStop) {
+                        RoundedRectangle(cornerRadius: 2.5).fill(Tokens.tint).frame(width: 9, height: 9)
+                            .frame(width: 26, height: 26).background(Circle().fill(.white))
+                    }
+                }
             }
+            .padding(vertical ? .vertical : .horizontal, handsFree ? 5 : 0)
         case .completed:
             Image(systemName: "checkmark").font(.system(size: 11, weight: .bold))
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
@@ -487,14 +520,11 @@ struct BarView: View {
         }
     }
 
-    private func barButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .bold)).frame(width: 26, height: 26)
-                .background(Circle().fill(.white.opacity(0.16)))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+    private func barButton(label: String, action: @escaping () -> Void, @ViewBuilder face: () -> some View) -> some View {
+        Button(action: action) { face().contentShape(Circle()) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .transition(.scale(scale: 0.5).combined(with: .opacity))
     }
 
     private var label: String {
@@ -516,11 +546,14 @@ struct SnapPreview: View {
     var body: some View {
         ZStack {
             if let anchor = model.preview {
-                let vertical = anchor.isVertical
-                EdgeTab(edge: anchor.edge, flareStart: false, flareEnd: false, flare: 0)
-                    .fill(Tokens.tintGraphic.opacity(0.35))
-                    .overlay(EdgeTab(edge: anchor.edge, flareStart: false, flareEnd: false, flare: 0).stroke(Tokens.tintGraphic, lineWidth: 1))
-                    .frame(width: vertical ? 12 : 60, height: vertical ? 60 : 12)
+                // The shape the bar will take there: a little box in a corner, a rounded tab on an edge.
+                let size = anchor.idleSize, thickness = max(size.thickness, 12)
+                let shape = EdgeTab(
+                    edge: anchor.edge, flareStart: anchor.freeEnds.start, flareEnd: anchor.freeEnds.end, flare: 0,
+                    radius: anchor.isCorner ? 7 : nil)
+                shape.fill(Tokens.tintGraphic.opacity(0.35))
+                    .overlay(shape.stroke(Tokens.tintGraphic, lineWidth: 1))
+                    .frame(width: anchor.isVertical ? thickness : size.length, height: anchor.isVertical ? size.length : thickness)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor.alignment)
                     .transition(.opacity)
             }
@@ -536,15 +569,17 @@ struct Waveform: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion && model.state != .recording(handsFree: false))) { context in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: reduceMotion && model.state != .recording(handsFree: false))) { context in
             let now = context.date
             let bars = vertical ? AnyLayout(VStackLayout(spacing: 3)) : AnyLayout(HStackLayout(spacing: 3))
             bars {
                 ForEach(0..<11, id: \.self) { i in
                     let value = level(i, at: now)
                     let length = 3 + 17 * CGFloat(value)
+                    // Loud bars warm toward the tint gradually; a hard switch flickers.
+                    let warmth = model.state.isRecording ? min(1, max(0, (value - 0.6) / 0.3)) : 0
                     Capsule()
-                        .fill(model.state.isRecording && value > 0.7 ? Tokens.tintGraphic : .white)
+                        .fill(Color.white.mix(with: Tokens.tintGraphic, by: warmth))
                         .frame(width: vertical ? length : 3, height: vertical ? 3 : length)
                         .opacity(barOpacity(i, at: now))
                 }
@@ -558,12 +593,17 @@ struct Waveform: View {
         let phase = now.timeIntervalSinceReferenceDate
         let taper = 0.55 + 0.45 * cos(Double(i - 5) / 5 * .pi / 2)
         // The centre bar is the newest level; each step out is one sample older.
+        // Bars slide from their sample toward the next one, so the ripple flows instead of stepping.
         let history = model.levels
+        func sample(_ k: Int) -> Double {
+            k < 0 ? Double(model.level) : k < history.count ? Double(history[history.count - 1 - k]) : 0
+        }
         let lag = abs(i - 5)
-        let heard = lag < history.count ? Double(history[history.count - 1 - lag]) : 0
+        let slide = min(1, max(0, now.timeIntervalSince(model.lastHistoryTime) / BarModel.historyStep))
+        let heard = sample(lag) + (sample(lag - 1) - sample(lag)) * slide
         switch model.state {
         case .recording:
-            let jitter = reduceMotion ? 1 : 0.8 + 0.2 * sin(phase * (5 + Double(i % 3)) + Double(i) * 1.7)
+            let jitter = reduceMotion ? 1 : 0.93 + 0.07 * sin(phase * (2.5 + Double(i % 3) * 0.6) + Double(i) * 1.7)
             return min(1, heard * taper * jitter + 0.04)
         case .transcribing:
             // Freeze the last shape and ease it down under the sweep.
@@ -599,12 +639,14 @@ struct Bubble: Shape {
     func path(in rect: CGRect) -> Path {
         let body = Path(roundedRect: rect, cornerRadius: Tokens.popupRadius)
         guard let pointer else { return body }
-        let half: CGFloat = 8, depth: CGFloat = 7
+        let half: CGFloat = 8, depth: CGFloat = 9
         let limit = (pointer == .leading || pointer == .trailing ? rect.height : rect.width) / 2 - Tokens.popupRadius - half
+        // The base stays on the card's straight edge; the tip leans the rest of the way toward a bar in a corner.
         let s = min(max(shift, -limit), limit)
+        let t = s + min(max(shift - s, -14), 14)
         let (base1, tip, base2): (CGPoint, CGPoint, CGPoint) = switch pointer {
-        case .bottom: (CGPoint(x: rect.midX + s - half, y: rect.maxY), CGPoint(x: rect.midX + s, y: rect.maxY + depth), CGPoint(x: rect.midX + s + half, y: rect.maxY))
-        case .top: (CGPoint(x: rect.midX + s - half, y: rect.minY), CGPoint(x: rect.midX + s, y: rect.minY - depth), CGPoint(x: rect.midX + s + half, y: rect.minY))
+        case .bottom: (CGPoint(x: rect.midX + s - half, y: rect.maxY), CGPoint(x: rect.midX + t, y: rect.maxY + depth), CGPoint(x: rect.midX + s + half, y: rect.maxY))
+        case .top: (CGPoint(x: rect.midX + s - half, y: rect.minY), CGPoint(x: rect.midX + t, y: rect.minY - depth), CGPoint(x: rect.midX + s + half, y: rect.minY))
         case .leading: (CGPoint(x: rect.minX, y: rect.midY - half), CGPoint(x: rect.minX - depth, y: rect.midY), CGPoint(x: rect.minX, y: rect.midY + half))
         case .trailing: (CGPoint(x: rect.maxX, y: rect.midY - half), CGPoint(x: rect.maxX + depth, y: rect.midY), CGPoint(x: rect.maxX, y: rect.midY + half))
         }
@@ -667,7 +709,7 @@ struct PopupView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-        .padding(10)
+        .padding(12)
         .animation(Tokens.spring, value: model.toast?.id)
     }
 
@@ -682,13 +724,7 @@ struct PopupView: View {
                             .lineLimit(5).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer(minLength: 0)
-                Button { model.dismissToast() } label: {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.5))
-                        .frame(width: 18, height: 18).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+                Spacer(minLength: 14)  // room for the close button in the corner
             }
             if toast.keycap != nil || !toast.actions.isEmpty {
                 HStack(spacing: 8) {
@@ -718,7 +754,16 @@ struct PopupView: View {
         }
         .foregroundStyle(.white)
         .padding(14)
-        .frame(width: 316, alignment: .leading)
+        .frame(width: 280, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            Button { model.dismissToast() } label: {
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 26, height: 26).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+            .padding(4)
+        }
         .background(Glass(shape: Bubble(pointer: toast.kind == .tip ? facing : nil, shift: model.pointerShift)))
         .onHover { model.toastPaused = $0 }
         .accessibilityElement(children: .contain)
@@ -733,9 +778,10 @@ public struct BarPreview: View {
 
     public var body: some View {
         // Drawn as an overlay: placed directly in a stack, the bar gives up its space.
-        Color.clear.frame(width: 240, height: 44)
+        // A strip of "screen" behind it, so the dark bar shows in Dark Mode too.
+        UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(.quaternary.opacity(0.7))
+            .frame(width: 240, height: 48)
             .overlay(alignment: .bottom) { BarView(model: model, anchor: .bottom, onDrag: {}, onDrop: {}).frame(width: 240, height: 52).clipped() }
-            .overlay(alignment: .bottom) { Capsule().fill(.quaternary).frame(height: 2) }
             .accessibilityLabel("The Glide bar")
     }
 }

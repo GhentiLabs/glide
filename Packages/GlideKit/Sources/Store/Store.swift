@@ -30,6 +30,18 @@ public final class Store {
         save(records, to: recordsURL)
     }
 
+    /// The user's own correction of a past dictation, made in the history list. It becomes the record's final text,
+    /// replacing whatever was captured from the field, so a mistyped edit can't teach Glide the wrong thing.
+    public func correct(_ id: UUID, to text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let index = records.firstIndex(where: { $0.id == id }) else { return }
+        let changed = text != records[index].refinedText
+        records[index].finalText = changed ? text : nil
+        records[index].verdict = changed ? .edited : .untouched
+        records[index].diff = []  // spans describe the old final text; learning rebuilds them from the new one
+        save(records, to: recordsURL)
+    }
+
     public func clearHistory() {
         records.removeAll()
         save(records, to: recordsURL)

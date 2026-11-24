@@ -243,8 +243,12 @@ private struct SearchPill: View {
 
 private struct HistoryRow: View {
     let record: DictationRecord
+    @Environment(AppModel.self) private var model
     @State private var hovering = false
     @State private var copied = false
+    /// The text being edited; nil when the row is just showing.
+    @State private var draft: String?
+    @FocusState private var editing: Bool
 
     private var text: String { record.finalText ?? record.refinedText }
 
@@ -265,26 +269,66 @@ private struct HistoryRow: View {
                 }
             }
             .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
-            Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                copied = true
-                Task {
-                    try? await Task.sleep(for: .seconds(1.2))
-                    copied = false
+            if draft != nil {
+                editor
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(text).textSelection(.enabled)
+                    // A score marking, as on the design page.
+                    if record.finalText != nil { Text("edited").font(.system(.caption, design: .serif)).italic().foregroundStyle(.secondary) }
                 }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc").contentTransition(.symbolEffect(.replace))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 10) {
+                    Button("Edit", systemImage: "pencil") {
+                        draft = text
+                        editing = true
+                    }
+                    .help("Edit this transcript")
+                    Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc", action: copy)
+                        .contentTransition(.symbolEffect(.replace))
+                        .help("Copy")
+                }
+                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .opacity(hovering || copied ? 1 : 0)
             }
-            .buttonStyle(.borderless)
-            .help("Copy")
-            .accessibilityLabel(copied ? "Copied" : "Copy")
-            .opacity(hovering || copied ? 1 : 0)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 9).fill(.quaternary.opacity(hovering ? 0.35 : 0)))
+        .background(RoundedRectangle(cornerRadius: 9).fill(.quaternary.opacity(hovering && draft == nil ? 0.35 : 0)))
         .onHover { hovering = $0 }
+    }
+
+    /// Return saves, Escape cancels.
+    @ViewBuilder private var editor: some View {
+        TextField("Transcript", text: Binding(get: { draft ?? "" }, set: { draft = $0 }), axis: .vertical)
+            .textFieldStyle(.plain)
+            .focused($editing)
+            .onSubmit(save)
+            .onExitCommand { draft = nil }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Tokens.tint, lineWidth: 1.5))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 6) {
+            Button("Cancel") { draft = nil }
+            Button("Save", action: save).buttonStyle(.borderedProminent)
+                .disabled((draft ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .controlSize(.small)
+    }
+
+    private func save() {
+        if let draft { model.store.correct(record.id, to: draft) }
+        draft = nil
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            copied = false
+        }
     }
 }
 
