@@ -36,6 +36,12 @@ targets:
         product: Inserter
       - package: GlideKit
         product: Overlay
+      - package: GlideKit
+        product: Refiner
+      - package: GlideKit
+        product: Store
+      - package: GlideKit
+        product: FieldContext
     info:
       path: Glide/Info.plist
       properties:

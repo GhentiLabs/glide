@@ -1,3 +1,4 @@
+import Foundation
 import FluidAudio
 import GlideCore
 
@@ -24,4 +25,9 @@ public actor ParakeetRecognizer: GlideCore.Recognizer {
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         return try await manager.transcribe(audio, decoderState: &state).text
     }
+}
+
+extension ParakeetRecognizer {
+    /// Where the model is stored on disk.
+    public static var modelDirectory: URL { AsrModels.defaultCacheDirectory(for: .v3) }
 }
