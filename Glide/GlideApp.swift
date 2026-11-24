@@ -43,7 +43,8 @@ private struct MenuBarLabel: View {
         Image(nsImage: Self.glyph)
             .onAppear {
                 app.openWindow = { openWindow(id: $0) }
-                if !app.isSetupDone { app.open("setup") }
+                // `open Glide.app --args -showMain YES` starts with the main window up.
+                if !app.isSetupDone { app.open("setup") } else if UserDefaults.standard.bool(forKey: "showMain") { app.open("main") }
             }
     }
 

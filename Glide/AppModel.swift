@@ -66,6 +66,7 @@ final class AppModel {
     init() {
         microphoneID = UserDefaults.standard.string(forKey: "microphoneID") ?? ""
         recorder.microphoneID = microphoneID.isEmpty ? nil : microphoneID
+        lastApp = NSWorkspace.shared.frontmostApplication.flatMap { $0.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : $0 }
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in

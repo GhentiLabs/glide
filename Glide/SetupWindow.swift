@@ -300,7 +300,7 @@ private struct HotkeyStep: View {
                     .scaleEffect(lit ? 0.96 : 1)
                     .animation(Tokens.spring, value: lit)
                 BarPreview(model: app.bar)
-                Text("This bar sits at the edge of your screen. It listens while the key is held.")
+                Text("This is the bar at the edge of your screen. It shows when Glide is listening.")
                     .font(.callout).foregroundStyle(.secondary)
                 if showHelp {
                     Text("macOS may be using fn itself. In Keyboard settings, set “Press fn key to” to “Do Nothing”, then try again.")
@@ -343,11 +343,12 @@ private struct TryStep: View {
         VStack {
             StepHeader(title: "Say something", subtitle: "Click in the box, hold fn and speak.")
             CheckCard {
-                Label(worked ? "That worked" : "Did your words appear?", systemImage: worked ? "checkmark.circle.fill" : "text.cursor")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(worked ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.primary))
-                    .contentTransition(.symbolEffect(.replace))
-                    .animation(Tokens.spring, value: worked)
+                HStack(spacing: 8) {
+                    if worked { Image(systemName: "checkmark.circle.fill").foregroundStyle(Tokens.tint).transition(.scale.combined(with: .opacity)) }
+                    Text(worked ? "That worked" : "Did your words appear?")
+                }
+                .font(.title3.weight(.semibold))
+                .animation(Tokens.spring, value: worked)
                 if let progress = app.modelProgress {
                     VStack(spacing: 6) {
                         Text("The speech model is still downloading.").foregroundStyle(.secondary)

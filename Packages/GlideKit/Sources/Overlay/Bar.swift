@@ -176,6 +176,8 @@ public final class BarPanel {
     private let popup: NSPanel
     private let preview: NSPanel
     private let model: BarModel
+    /// Looked up when the bar is placed, not on every mouse move of a drag.
+    private var dockShowing = true
     private var screen: NSScreen? { panel.screen ?? NSScreen.screens.first }
 
     public init(model: BarModel) {
@@ -188,10 +190,25 @@ public final class BarPanel {
             BarView(model: model, onDrag: { [weak self] in self?.drag() }, onDrop: { [weak self] in self?.drop() }))
         popup.contentView = Self.host(PopupView(model: model))
         preview.contentView = Self.host(SnapPreview(model: model))
-        // shortcut: the Dock moving or resizing without a screen change isn't noticed until the next drop or relaunch.
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.place(animated: false) } }
+        // A full-screen Space has no Dock, so the bar drops to the bezel there and climbs back on the way out.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.followDock() } }
+        DistributedNotificationCenter.default().addObserver(
+            forName: .init("com.apple.dock.prefchanged"), object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.followDock() } }
+    }
+
+    /// The Dock takes a moment to come or go, so look now and again once it has settled.
+    private func followDock() {
+        place(animated: true)
+        Task {
+            try? await Task.sleep(for: .seconds(0.8))
+            if !model.dragging { place(animated: true) }
+        }
     }
 
     /// A hosting view that leaves the panel's size to us; by default it resizes the window to fit its content.
@@ -221,9 +238,21 @@ public final class BarPanel {
         preview.orderFrontRegardless()
     }
 
+    /// A full-screen Space hides the Dock, yet `visibleFrame` keeps the Dock's inset there. The window list knows.
+    /// shortcut: one answer for every display; check the Dock window's own display if two-screen setups misplace the bar.
+    private static var dockIsShowing: Bool {
+        let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.processIdentifier
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+        return windows.contains {
+            $0[kCGWindowOwnerPID as String] as? Int32 == dock
+                && $0[kCGWindowLayer as String] as? Int32 == CGWindowLevelForKey(.dockWindow)
+        }
+    }
+
     /// The screen without the Dock, so the bar sits on top of it rather than over its icons.
     /// The menu bar stays in: the bar may hang from the top bezel.
     private func area(of screen: NSScreen) -> NSRect {
+        guard dockShowing else { return screen.frame }
         var area = screen.visibleFrame
         area.size.height = screen.frame.maxY - area.minY
         return area
@@ -258,6 +287,7 @@ public final class BarPanel {
 
     private func place(animated: Bool) {
         guard let screen else { return }
+        dockShowing = Self.dockIsShowing
         let anchor = model.anchor
         let target = frame(for: anchor, on: screen)
         let popupFrame = popupFrame(beside: target, anchor: anchor, on: screen)
@@ -307,8 +337,10 @@ public final class BarPanel {
 /// The bar and every popup: dark glass in both appearances, with a hairline highlight and a soft shadow.
 struct Glass<S: Shape>: View {
     let shape: S
-    /// Washes the glass, for errors and the latched hands-free state.
+    /// Colours the edge: red for errors, the tint while latched hands-free.
     var tint: Color?
+    /// How strongly the tint also washes the glass.
+    var wash: Double = 0
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -321,7 +353,7 @@ struct Glass<S: Shape>: View {
                 shape.fill(.ultraThinMaterial)
                 shape.fill(Tokens.barGlass.opacity(0.6))
             }
-            if let tint { shape.fill(tint.opacity(0.25)) }
+            if let tint, wash > 0 { shape.fill(tint.opacity(wash)) }
         }
         .overlay(shape.stroke(tint ?? .white, lineWidth: strong ? 1 : 0.5).opacity(tint != nil ? 0.9 : strong ? 0.5 : 0.2))
         .environment(\.colorScheme, .dark)
@@ -331,12 +363,15 @@ struct Glass<S: Shape>: View {
 
 struct BarView: View {
     let model: BarModel
+    /// Overrides the model's anchor, for the first-run preview.
+    var anchor: BarAnchor?
     let onDrag: () -> Void
     let onDrop: () -> Void
     @State private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var vertical: Bool { !model.dragging && model.anchor.isVertical }
+    private var place: BarAnchor { anchor ?? model.anchor }
+    private var vertical: Bool { !model.dragging && place.isVertical }
     private var handsFree: Bool { model.state == .recording(handsFree: true) }
     private var hidden: Bool { model.isHidden && model.state == .idle && !hovering }
     private var isError: Bool {
@@ -348,21 +383,21 @@ struct BarView: View {
     private var size: (length: CGFloat, thickness: CGFloat) {
         if hidden { return (32, 3) }
         switch model.state {
-        case .idle: return model.dragging ? (56, 22) : hovering ? (vertical ? (24, 56) : (136, 24)) : (44, 9)
+        case .idle: return model.dragging ? (56, 22) : hovering ? (vertical ? 56 : 136, 24) : (44, 9)
         case .initializing, .transcribing: return (148, 30)
         case .recording(let handsFree): return handsFree ? (212, 36) : (148, 30)
         case .completed, .error: return (60, 24)
         }
     }
 
-    private var edge: Edge? { model.dragging ? nil : model.anchor.edge }
+    private var edge: Edge? { model.dragging ? nil : place.edge }
 
     private var shape: EdgeTab {
         // A flare where the bar meets the bezel, except at a screen corner, where that end sits flush.
         let along: (start: Edge.Set.Element, end: Edge.Set.Element) = vertical ? (.top, .bottom) : (.leading, .trailing)
         return EdgeTab(
-            edge: edge, flareStart: !model.anchor.edges.contains(along.start),
-            flareEnd: !model.anchor.edges.contains(along.end), flare: min(6, size.thickness / 2))
+            edge: edge, flareStart: !place.edges.contains(along.start),
+            flareEnd: !place.edges.contains(along.end), flare: min(6, size.thickness / 2))
     }
 
     private var flareRoom: CGFloat {
@@ -383,7 +418,7 @@ struct BarView: View {
             .frame(
                 width: vertical ? size.thickness : size.length + flareRoom,
                 height: vertical ? size.length + flareRoom : size.thickness)
-            .background(Glass(shape: shape, tint: isError ? .red : handsFree ? Tokens.tintGraphic : nil))
+            .background(Glass(shape: shape, tint: isError ? .red : handsFree ? Tokens.tintGraphic : nil, wash: isError ? 0.3 : 0))
             .brightness(model.state == .completed ? 0.12 : 0)
             .keyframeAnimator(initialValue: CGFloat(0), trigger: isError) { view, offset in
                 view.offset(x: vertical ? 0 : offset, y: vertical ? offset : 0)
@@ -418,7 +453,7 @@ struct BarView: View {
             .animation(Tokens.spring, value: hovering)
             .animation(Tokens.spring, value: model.dragging)
             .animation(Tokens.spring, value: hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.dragging ? .center : model.anchor.alignment)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.dragging ? .center : place.alignment)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(label)
     }
@@ -697,9 +732,10 @@ public struct BarPreview: View {
     public init(model: BarModel) { self.model = model }
 
     public var body: some View {
-        BarView(model: model, onDrag: {}, onDrop: {})
-            .frame(width: 240, height: 52)
-            .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
+        // Drawn as an overlay: placed directly in a stack, the bar gives up its space.
+        Color.clear.frame(width: 240, height: 44)
+            .overlay(alignment: .bottom) { BarView(model: model, anchor: .bottom, onDrag: {}, onDrop: {}).frame(width: 240, height: 52).clipped() }
+            .overlay(alignment: .bottom) { Capsule().fill(.quaternary).frame(height: 2) }
             .accessibilityLabel("The Glide bar")
     }
 }

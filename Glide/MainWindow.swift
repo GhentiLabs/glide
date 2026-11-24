@@ -35,14 +35,13 @@ private struct PrivacyCard: View {
             Image(systemName: "lock.laptopcomputer").font(.system(size: 17)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text("On this Mac").font(.callout.weight(.medium))
-                Text("Audio and history stay here").font(.caption).foregroundStyle(.secondary)
+                Text("Nothing is uploaded").font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             Button("Settings", systemImage: "gearshape") { app.open("settings") }
                 .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .padding(10)
+        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 }
 
@@ -90,7 +89,7 @@ struct HomeView: View {
                             VStack(spacing: 0) {
                                 ForEach(group.records) { record in
                                     HistoryRow(record: record)
-                                    if record.id != group.records.last?.id { Divider().padding(.leading, 74) }
+                                    if record.id != group.records.last?.id { Divider().padding(.leading, 92) }
                                 }
                             }
                             .card(padding: 6)
@@ -136,11 +135,12 @@ private struct Headline: View {
             } else {
                 Text("Hold")
                 Keycap("fn", size: 20)
-                Text("to dictate")
                 if let lastApp = app.lastApp, let name = lastApp.localizedName {
-                    Text("in")
+                    Text("to dictate in")
                     if let icon = lastApp.icon { Image(nsImage: icon).resizable().frame(width: 28, height: 28) }
                     Text(name)
+                } else {
+                    Text("to dictate")
                 }
                 Spacer()
             }
@@ -188,7 +188,7 @@ private struct GettingStarted: View {
         let tasks: [(symbol: String, title: String, detail: String, done: Bool)] = [
             ("mic", "Your first dictation", "Hold fn anywhere and speak.", !app.store.records.isEmpty),
             ("hand.tap", "Go hands-free", "Double-tap fn, then tap it again to finish.", app.usedHandsFree),
-            ("doc.on.clipboard", "Paste the last one", "Press ⌃⌘V to paste your last dictation again.", app.usedPasteLast),
+            ("clipboard", "Paste the last one", "Press ⌃⌘V to paste your last dictation again.", app.usedPasteLast),
         ]
         if tasks.contains(where: { !$0.done }) {
             VStack(alignment: .leading, spacing: 10) {
@@ -197,18 +197,21 @@ private struct GettingStarted: View {
                     ForEach(tasks, id: \.title) { task in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Image(systemName: task.symbol).foregroundStyle(Tokens.tint)
+                                Image(systemName: task.symbol).foregroundStyle(task.done ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Tokens.tint))
                                 Spacer()
                                 Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(task.done ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.tertiary))
                             }
                             .font(.title3)
-                            Text(task.title).font(.headline)
-                            Text(task.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            .frame(height: 24)
+                            Group {
+                                Text(task.title).font(.headline)
+                                Text(task.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                            .opacity(task.done ? 0.55 : 1)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .card(padding: 16)
-                        .opacity(task.done ? 0.6 : 1)
                         .accessibilityElement(children: .combine)
                         .accessibilityValue(task.done ? "Done" : "Not done")
                     }
@@ -253,7 +256,7 @@ private struct HistoryRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(record.time, format: .dateTime.hour().minute())
-                .monospacedDigit().foregroundStyle(.secondary).frame(width: 46, alignment: .leading)
+                .monospacedDigit().foregroundStyle(.secondary).fixedSize().frame(width: 64, alignment: .leading)
             Group {
                 if let app {
                     Image(nsImage: app.icon).resizable().frame(width: 16, height: 16).help(app.name).accessibilityLabel(app.name)
