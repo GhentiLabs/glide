@@ -31,3 +31,10 @@ target/
 
 .claude
 ./claude
+
+# Glide v2
+.build/
+build/
+Glide.xcodeproj/
+Packages/GlideKit/.swiftpm/
+!Glide/Assets.xcassets/**/*.png
