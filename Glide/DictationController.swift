@@ -87,7 +87,10 @@ final class DictationController {
         case .latchHandsFree:
             if recording { show(.recording(handsFree: true)) }
         case .cancel:
-            if recording { _ = recorder.stop() }
+            if recording {
+                log.notice("cancelled")
+                _ = recorder.stop()
+            }
             recording = false
             show(.idle)
         case .submit:

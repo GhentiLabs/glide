@@ -45,7 +45,8 @@ public final class HotkeyListener: @unchecked Sendable {
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        let t = TimeInterval(event.timestamp) / 1_000_000_000
+        // Not event.timestamp: on Apple silicon it counts mach ticks, not nanoseconds, which made every hold look like a tap.
+        let t = ProcessInfo.processInfo.systemUptime
         var action: HotkeyGesture.Action?
         var swallow = false
         switch type {
