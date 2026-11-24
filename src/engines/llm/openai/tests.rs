@@ -104,6 +104,37 @@ async fn keeps_temperature_for_openai_compatible_providers() {
         assert_eq!(body["temperature"].as_f64(), Some(0.0), "{provider:?}");
         assert_eq!(body["model"].as_str(), Some("test-model"));
         assert_eq!(body["messages"].as_array().unwrap().len(), 2);
+        assert!(body.get("reasoning_effort").is_none(), "{provider:?}");
+    }
+}
+
+#[tokio::test]
+async fn sends_low_reasoning_effort_for_gpt_oss_models() {
+    for (provider, model) in [
+        (Provider::Groq, "openai/gpt-oss-20b"),
+        (Provider::Cerebras, "gpt-oss-120b"),
+        (Provider::Fireworks, "accounts/fireworks/models/gpt-oss-20b"),
+    ] {
+        let Some(server) = MockHttpServer::try_spawn(
+            r#"{"choices":[{"message":{"role":"assistant","content":"cleaned text"}}]}"#,
+        ) else {
+            eprintln!("skipping mock server test because loopback sockets are unavailable");
+            return;
+        };
+        let providers = providers_for_mock(provider, server.base_url());
+        let llm = OpenAiLlmProvider::new(
+            provider,
+            model,
+            &crate::engines::llm::build_cleanup_system_prompt("system", None),
+            &providers,
+        )
+        .unwrap();
+
+        llm.clean("raw text").await.unwrap();
+
+        let request = server.join();
+        let body: Value = serde_json::from_str(request.split("\r\n\r\n").last().unwrap()).unwrap();
+        assert_eq!(body["reasoning_effort"].as_str(), Some("low"), "{model}");
     }
 }
 #[tokio::test]

@@ -25,6 +25,8 @@ pub(super) const kCGEventTapOptionListenOnly: u32 = 1;
 pub(super) const kCGEventKeyDown: u32 = 10;
 pub(super) const kCGEventKeyUp: u32 = 11;
 pub(super) const kCGEventFlagsChanged: u32 = 12;
+pub(super) const kCGEventTapDisabledByTimeout: u32 = 0xFFFFFFFE;
+pub(super) const kCGEventTapDisabledByUserInput: u32 = 0xFFFFFFFF;
 
 // CGEventField
 pub(super) const kCGKeyboardEventKeycode: u32 = 9;
@@ -54,6 +56,7 @@ unsafe extern "C" {
 
     pub(super) fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
     pub(super) fn CGEventGetFlags(event: CGEventRef) -> u64;
+    pub(super) fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
 
     // CoreFoundation
     pub(super) fn CFMachPortCreateRunLoopSource(

@@ -53,6 +53,8 @@ pub fn start_listener(shared: SharedState, runtime: Arc<Runtime>) {
                 return;
             }
 
+            (*(ctx_ptr as *mut TapContext)).tap = tap;
+
             let source = ffi::CFMachPortCreateRunLoopSource(ffi::kCFAllocatorDefault, tap, 0);
             let run_loop = ffi::CFRunLoopGetCurrent();
             ffi::CFRunLoopAddSource(run_loop, source, ffi::kCFRunLoopCommonModes_real);

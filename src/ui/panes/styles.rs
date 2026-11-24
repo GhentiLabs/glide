@@ -284,7 +284,7 @@ impl SettingsApp {
                                     crate::platform::fuzzy_match(&query, a).map(|s| (a, s))
                                 })
                                 .collect();
-                            scored.sort_by(|a, b| b.1.cmp(&a.1));
+                            scored.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
                             let mut grid = div().flex().flex_wrap().gap_2().p_2();
                             for (app, _) in &scored {
                                 let app_name = (*app).clone();

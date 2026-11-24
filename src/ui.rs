@@ -162,17 +162,10 @@ impl SettingsApp {
             }
         }));
 
-        let shared_for_defaults = shared.clone();
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(2)).await;
-            if crate::engines::model_catalog::any_provider_verified() {
-                let _ = shared_for_defaults.update_config(|config| {
-                    crate::engines::model_catalog::apply_smart_defaults(config);
-                });
-            }
-            let _ = this.update(cx, |_this, cx| cx.notify());
-        })
-        .detach();
+        // The startup fetch (spawned before this window exists) applies smart
+        // defaults from its completion callback; generation 0 means "any
+        // completed fetch", covering windows opened before or after it.
+        Self::notify_when_models_refresh(0, cx);
 
         let show_onboarding = !config.app.onboarding_completed;
         let permission_statuses = permissions::check_all();

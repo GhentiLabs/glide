@@ -41,6 +41,8 @@ struct ChatCompletionRequest {
     messages: Vec<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -65,6 +67,7 @@ impl super::LlmProvider for OpenAiLlmProvider {
         let request = ChatCompletionRequest {
             model: self.model.clone(),
             temperature: deterministic_temperature(self.provider, &self.model),
+            reasoning_effort: reasoning_effort(&self.model),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
@@ -118,7 +121,7 @@ impl super::LlmProvider for OpenAiLlmProvider {
     }
 
     fn name(&self) -> &'static str {
-        "OpenAI GPT"
+        self.provider.label()
     }
 }
 // We use a deterministic temperature (0.0) for models that support it, however
@@ -134,6 +137,12 @@ fn deterministic_temperature(provider: Provider, model: &str) -> Option<f32> {
 fn openai_model_rejects_temperature_zero(model: &str) -> bool {
     let model = model.trim().to_lowercase();
     model.starts_with("gpt-5") || model.starts_with('o')
+}
+
+// gpt-oss models reason before answering; low effort keeps dictation cleanup
+// fast (on Groq: ~7 reasoning tokens instead of ~300) with identical output.
+fn reasoning_effort(model: &str) -> Option<&'static str> {
+    model.to_lowercase().contains("gpt-oss").then_some("low")
 }
 fn capped_error_body(body: &str) -> String {
     let trimmed = body.trim();

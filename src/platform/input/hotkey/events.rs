@@ -18,6 +18,19 @@ pub(super) unsafe extern "C" fn event_tap_callback(
     user_info: *mut std::ffi::c_void,
 ) -> ffi::CGEventRef {
     let ctx = unsafe { &mut *(user_info as *mut TapContext) };
+
+    // macOS disables the tap if the callback is too slow (or on certain user
+    // input); we must re-enable it here or the hotkey stays dead until relaunch.
+    if event_type == ffi::kCGEventTapDisabledByTimeout
+        || event_type == ffi::kCGEventTapDisabledByUserInput
+    {
+        if !ctx.tap.is_null() {
+            unsafe { ffi::CGEventTapEnable(ctx.tap, true) };
+            eprintln!("[glide] Event tap disabled by system (type {event_type:#x}); re-enabled.");
+        }
+        return event;
+    }
+
     let keycode =
         unsafe { ffi::CGEventGetIntegerValueField(event, ffi::kCGKeyboardEventKeycode) } as u16;
 

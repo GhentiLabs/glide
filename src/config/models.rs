@@ -172,9 +172,11 @@ mod tests {
 
     #[test]
     fn refresh_builtin_prompt_defaults_preserves_custom_prompt() {
-        let mut config = DictationConfig::default();
-        config.system_prompt = "custom prompt".to_string();
-        config.system_prompt_uses_default = true;
+        let mut config = DictationConfig {
+            system_prompt: "custom prompt".to_string(),
+            system_prompt_uses_default: true,
+            ..Default::default()
+        };
 
         config.refresh_builtin_prompt_defaults();
 
@@ -184,8 +186,10 @@ mod tests {
 
     #[test]
     fn sync_system_prompt_default_flag_tracks_current_default() {
-        let mut config = DictationConfig::default();
-        config.system_prompt = "custom prompt".to_string();
+        let mut config = DictationConfig {
+            system_prompt: "custom prompt".to_string(),
+            ..Default::default()
+        };
         config.sync_system_prompt_default_flag();
         assert!(!config.system_prompt_uses_default);
 

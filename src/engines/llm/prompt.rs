@@ -1,4 +1,5 @@
 use crate::config::STYLE_PROMPT_PLACEHOLDER;
+use crate::text::find_ignore_case;
 pub(crate) fn build_cleanup_system_prompt(
     prompt_template: &str,
     style_prompt: Option<&str>,
@@ -23,12 +24,13 @@ pub(crate) fn build_cleanup_user_prompt(raw_text: &str) -> String {
 pub(crate) fn strip_think_tags(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let mut remaining = text;
-    while let Some(start) = remaining.to_lowercase().find("<think") {
-        result.push_str(&remaining[..start]);
-        if let Some(end) = remaining[start..].to_lowercase().find("</think") {
-            let close_end = remaining[start + end..]
+    while let Some(open) = find_ignore_case(remaining, "<think") {
+        result.push_str(&remaining[..open.start]);
+        if let Some(close) = find_ignore_case(&remaining[open.start..], "</think") {
+            let close_start = open.start + close.end;
+            let close_end = remaining[close_start..]
                 .find('>')
-                .map(|i| start + end + i + 1)
+                .map(|i| close_start + i + 1)
                 .unwrap_or(remaining.len());
             remaining = &remaining[close_end..];
         } else {
@@ -77,5 +79,16 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(strip_think_tags(input), expected);
         }
+    }
+
+    #[test]
+    fn strips_reasoning_after_multibyte_lowercase_expansion() {
+        // 'İ' (U+0130) is 2 bytes but lowercases to 3 bytes ("i\u{307}").
+        assert_eq!(strip_think_tags("İ<think>x</think>Y"), "İY");
+    }
+
+    #[test]
+    fn strips_unclosed_reasoning_after_multibyte_prefix() {
+        assert_eq!(strip_think_tags("İİİİİİİ<think"), "İİİİİİİ");
     }
 }

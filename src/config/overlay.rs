@@ -40,6 +40,31 @@ impl OverlayStyle {
     strum::VariantArray,
 )]
 #[serde(rename_all = "snake_case")]
+pub enum GlowVariant {
+    #[strum(message = "Aura")]
+    Aura,
+    #[strum(message = "Comet")]
+    Comet,
+}
+
+impl GlowVariant {
+    pub fn label(self) -> &'static str {
+        self.get_message().expect("glow variant label")
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    strum::EnumMessage,
+    strum::VariantArray,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum OverlayPosition {
     #[strum(message = "Notch")]
     Notch,
@@ -57,6 +82,7 @@ impl OverlayPosition {
 #[serde(default)]
 pub struct OverlayConfig {
     pub style: OverlayStyle,
+    pub glow_variant: GlowVariant,
     pub width: u32,
     pub height: u32,
     pub position: OverlayPosition,
@@ -67,6 +93,7 @@ impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             style: OverlayStyle::Classic,
+            glow_variant: GlowVariant::Aura,
             width: 300,
             height: 80,
             position: OverlayPosition::Floating,

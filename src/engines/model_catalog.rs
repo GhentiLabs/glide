@@ -1,12 +1,13 @@
 mod catalog;
 mod defaults;
+pub(crate) mod known_models;
 mod remote;
 mod types;
 mod verification;
 
 pub use catalog::{cached_llm_models, cached_stt_models};
 pub use defaults::{apply_smart_defaults, smart_llm_default, smart_stt_default};
-pub use remote::fetch_all_models;
+pub use remote::{fetch_all_models, fetch_generation};
 pub use types::ModelInfo;
 pub use verification::{any_provider_verified, provider_verified};
 
@@ -16,7 +17,9 @@ use crate::{
     engines::model_assets::{self, ParakeetInstallState},
 };
 #[cfg(test)]
-use catalog::{fallback_llm_models, fallback_stt_models};
+use catalog::{
+    CACHED_LLM_MODELS, CACHED_STT_MODELS, fallback_llm_models, fallback_stt_models, model_info,
+};
 #[cfg(test)]
 use remote::{
     ElevenLabsModelsResponseEntry, append_elevenlabs_scribe_models, excluded_remote_llm_model,

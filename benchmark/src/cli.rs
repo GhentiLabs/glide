@@ -51,6 +51,7 @@ pub fn run_cli() -> Result<()> {
                 );
             }
         }
+        BenchCommand::CheckModels => super::check_models::run_check_models()?,
         BenchCommand::Help => print_usage(),
     }
     Ok(())
@@ -77,6 +78,7 @@ where
         "flow" => parse_flow_args(args).map(BenchCommand::Flow),
         "prompt-eval" => parse_prompt_eval_args(args).map(BenchCommand::PromptEval),
         "compare" => parse_compare_args(args).map(BenchCommand::Compare),
+        "check-models" => Ok(BenchCommand::CheckModels),
         other => anyhow::bail!("unknown glide-bench command '{other}'\n\n{}", usage()),
     }
 }
@@ -224,10 +226,9 @@ fn parse_prompt_eval_args(mut args: VecDeque<String>) -> Result<PromptEvalOption
         }
     }
 
-    anyhow::ensure!(
-        !candidates.is_empty(),
-        "missing required --candidate; pass one or more provider:model values"
-    );
+    if candidates.is_empty() {
+        candidates = default_prompt_eval_candidates();
+    }
 
     Ok(PromptEvalOptions {
         suite: suite.context("missing required --suite")?,
@@ -286,6 +287,16 @@ fn parse_provider(raw: &str) -> Result<Provider> {
         "parakeet" => Ok(Provider::Parakeet),
         other => anyhow::bail!("unknown provider '{other}'"),
     }
+}
+
+fn default_prompt_eval_candidates() -> Vec<PromptEvalCandidate> {
+    glide::benchmark_support::LLM_REMOTE_DEFAULTS
+        .iter()
+        .map(|(provider, model)| PromptEvalCandidate {
+            provider: *provider,
+            model: (*model).to_string(),
+        })
+        .collect()
 }
 
 pub(super) fn parse_prompt_eval_candidate(raw: &str) -> Result<PromptEvalCandidate> {
@@ -405,5 +416,6 @@ fn usage() -> &'static str {
   glide-bench llm --text <text|@file|file> --provider <openai|groq|cerebras|fireworks|apple_local> --model <id> [--runs N] [--warmups N] [--output path]
   glide-bench flow --audio <wav> [--target-app name] [--style name|default] [--runs N] [--warmups N] [--paste|--no-paste] [--output path]
   glide-bench prompt-eval --suite <jsonl> --candidate <provider:model> [--candidate <provider:model> ...] [--runs N] [--timeout-secs N] [--output path]
-  glide-bench compare --baseline <json> --candidate <json> [--fail-threshold percent]"
+  glide-bench compare --baseline <json> --candidate <json> [--fail-threshold percent]
+  glide-bench check-models  (verify shipped default models against provider /models; reads GROQ_API_KEY, OPENAI_API_KEY, CEREBRAS_API_KEY, FIREWORKS_API_KEY)"
 }

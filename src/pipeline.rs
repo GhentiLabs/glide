@@ -7,6 +7,7 @@ use crate::{
     engines::llm,
     engines::stt,
     platform::paste,
+    text::find_ignore_case,
 };
 
 pub async fn process_recording(
@@ -162,18 +163,66 @@ fn apply_replacements(text: &str, replacements: &[ReplacementRule]) -> String {
             result = result.replace(&rule.find, &rule.replace);
         } else {
             let mut output = String::with_capacity(result.len());
-            let lower_find = rule.find.to_lowercase();
-            let mut search_start = 0;
-            let lower_result = result.to_lowercase();
-            while let Some(pos) = lower_result[search_start..].find(&lower_find) {
-                let abs_pos = search_start + pos;
-                output.push_str(&result[search_start..abs_pos]);
+            let mut rest = result.as_str();
+            while let Some(range) = find_ignore_case(rest, &rule.find) {
+                output.push_str(&rest[..range.start]);
                 output.push_str(&rule.replace);
-                search_start = abs_pos + rule.find.len();
+                rest = &rest[range.end..];
             }
-            output.push_str(&result[search_start..]);
+            output.push_str(rest);
             result = output;
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_replacements;
+    use crate::config::ReplacementRule;
+
+    fn rule(find: &str, replace: &str, case_sensitive: bool) -> ReplacementRule {
+        ReplacementRule {
+            find: find.to_string(),
+            replace: replace.to_string(),
+            case_sensitive,
+        }
+    }
+
+    #[test]
+    fn case_sensitive_replacement_only_matches_exact_case() {
+        let rules = [rule("Foo", "Bar", true)];
+        assert_eq!(apply_replacements("Foo foo Foo", &rules), "Bar foo Bar");
+    }
+
+    #[test]
+    fn case_insensitive_replacement_matches_any_case() {
+        let rules = [rule("hello", "hi", false)];
+        assert_eq!(
+            apply_replacements("Hello world, HELLO again hello", &rules),
+            "hi world, hi again hi"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_replacement_survives_lowercase_length_change() {
+        // 'İ' (U+0130) is 2 bytes but lowercases to 3 bytes ("i\u{307}").
+        let rules = [rule("abc", "xyz", false)];
+        assert_eq!(apply_replacements("İabc", &rules), "İxyz");
+    }
+
+    #[test]
+    fn case_insensitive_replacement_keeps_text_around_multibyte_chars() {
+        let rules = [rule("q", "z", false)];
+        assert_eq!(apply_replacements("aİbQc", &rules), "aİbzc");
+    }
+
+    #[test]
+    fn case_insensitive_find_containing_multibyte_char() {
+        let rules = [rule("İstanbul", "Istanbul", false)];
+        assert_eq!(
+            apply_replacements("İstanbul and İSTANBUL", &rules),
+            "Istanbul and Istanbul"
+        );
+    }
 }

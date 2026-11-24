@@ -249,3 +249,34 @@ fn base_url_redaction_keeps_only_host() {
     );
     assert_eq!(redacted_base_url_host("  ").as_deref(), None);
 }
+
+#[test]
+fn shipped_models_split_defaults_and_fallback_by_kind() {
+    let llm = shipped_llm_models(Provider::Groq);
+    assert!(llm.contains(&"llama-3.3-70b-versatile".to_string()));
+    assert!(llm.contains(&"openai/gpt-oss-20b".to_string()));
+    assert!(!llm.contains(&"whisper-large-v3-turbo".to_string()));
+
+    let stt = shipped_stt_models(Provider::Groq);
+    assert!(stt.contains(&"whisper-large-v3-turbo".to_string()));
+    assert!(!stt.contains(&"llama-3.3-70b-versatile".to_string()));
+
+    let fireworks_llm = shipped_llm_models(Provider::Fireworks);
+    assert!(fireworks_llm.contains(&"accounts/fireworks/models/gpt-oss-20b".to_string()));
+
+    let mut deduped = llm.clone();
+    deduped.dedup();
+    assert_eq!(llm, deduped);
+}
+
+#[test]
+fn missing_models_reports_only_absent_ids() {
+    let shipped = vec!["kept".to_string(), "gone".to_string()];
+    let available = std::collections::HashSet::from(["kept".to_string(), "extra".to_string()]);
+
+    assert_eq!(
+        missing_models(&shipped, &available),
+        vec!["gone".to_string()]
+    );
+    assert!(missing_models(&shipped[..1], &available).is_empty());
+}

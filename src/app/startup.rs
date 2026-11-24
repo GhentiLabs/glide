@@ -33,7 +33,14 @@ fn start_app(config: GlideConfig, cx: &mut App) {
 
     crate::platform::preload_app_icons();
     crate::engines::prewarm::start_app_prewarm(shared.clone(), runtime.clone());
-    crate::engines::model_catalog::fetch_all_models(&shared.snapshot().config.providers);
+    let defaults_shared = shared.clone();
+    crate::engines::model_catalog::fetch_all_models(
+        &shared.snapshot().config.providers,
+        move || {
+            let _ =
+                defaults_shared.update_config(crate::engines::model_catalog::apply_smart_defaults);
+        },
+    );
     actions::init(cx, shared.clone());
     actions::register(cx);
     actions::bind_keybindings(cx);

@@ -3,30 +3,21 @@ use crate::{
     engines::model_assets::{self, ParakeetInstallState},
 };
 
-use super::verification::{any_provider_verified, provider_verified};
-
-const STT_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
-    (Provider::Groq, "whisper-large-v3-turbo"),
-    (Provider::OpenAi, "whisper-1"),
-    (Provider::Fireworks, "whisper-v3-turbo"),
-    (Provider::ElevenLabs, "scribe_v2"),
-];
-
-const LLM_REMOTE_DEFAULTS: &[(Provider, &str)] = &[
-    (Provider::Groq, "meta-llama/llama-4-scout-17b-16e-instruct"),
-    (Provider::OpenAi, "gpt-5.4-nano"),
-    (Provider::Fireworks, "accounts/fireworks/models/gpt-oss-20b"),
-    (Provider::Cerebras, "gpt-oss-120b"),
-];
+use super::{
+    catalog::{llm_model_in_live_catalog, stt_model_in_live_catalog},
+    known_models::{LLM_REMOTE_DEFAULTS, STT_REMOTE_DEFAULTS},
+    verification::{any_provider_verified, provider_verified},
+};
 
 pub fn smart_stt_default() -> Option<ModelSelection> {
-    first_verified_remote_default(STT_REMOTE_DEFAULTS)
+    first_verified_remote_default(STT_REMOTE_DEFAULTS, stt_model_in_live_catalog)
         .or_else(installed_parakeet_stt_default)
         .or_else(installed_apple_speech_default)
 }
 
 pub fn smart_llm_default() -> Option<ModelSelection> {
-    first_verified_remote_default(LLM_REMOTE_DEFAULTS).or_else(apple_foundation_llm_default)
+    first_verified_remote_default(LLM_REMOTE_DEFAULTS, llm_model_in_live_catalog)
+        .or_else(apple_foundation_llm_default)
 }
 
 /// Applies the best available defaults without overriding valid user selections.
@@ -46,8 +37,9 @@ pub fn apply_smart_defaults(config: &mut GlideConfig) {
 
     if let Some(ref llm) = config.dictation.llm
         && !llm_selection_available(llm)
+        && let Some(smart) = smart_llm_default()
     {
-        config.dictation.llm = smart_llm_default();
+        config.dictation.llm = Some(smart);
     }
 
     if config.dictation.smart_defaults_applied {
@@ -64,7 +56,7 @@ pub fn apply_smart_defaults(config: &mut GlideConfig) {
 fn stt_selection_available(selection: &ModelSelection) -> bool {
     match selection.provider {
         Provider::OpenAi | Provider::Groq | Provider::Fireworks | Provider::ElevenLabs => {
-            provider_verified(selection.provider)
+            remote_selection_available(selection, stt_model_in_live_catalog)
         }
         Provider::Cerebras => false,
         Provider::AppleLocal => apple_speech_selection_available(&selection.model),
@@ -75,7 +67,7 @@ fn stt_selection_available(selection: &ModelSelection) -> bool {
 fn llm_selection_available(selection: &ModelSelection) -> bool {
     match selection.provider {
         Provider::OpenAi | Provider::Groq | Provider::Cerebras | Provider::Fireworks => {
-            provider_verified(selection.provider)
+            remote_selection_available(selection, llm_model_in_live_catalog)
         }
         Provider::ElevenLabs => false,
         Provider::AppleLocal => {
@@ -83,6 +75,15 @@ fn llm_selection_available(selection: &ModelSelection) -> bool {
         }
         Provider::Parakeet => false,
     }
+}
+
+/// Available unless the provider's fetched catalog positively lacks the model.
+fn remote_selection_available(
+    selection: &ModelSelection,
+    in_live_catalog: fn(Provider, &str) -> Option<bool>,
+) -> bool {
+    provider_verified(selection.provider)
+        && in_live_catalog(selection.provider, &selection.model) != Some(false)
 }
 
 fn apple_speech_selection_available(model: &str) -> bool {
@@ -98,10 +99,14 @@ fn parakeet_selection_available(model: &str) -> bool {
     )
 }
 
-fn first_verified_remote_default(candidates: &[(Provider, &str)]) -> Option<ModelSelection> {
+fn first_verified_remote_default(
+    candidates: &[(Provider, &str)],
+    in_live_catalog: fn(Provider, &str) -> Option<bool>,
+) -> Option<ModelSelection> {
     candidates
         .iter()
-        .find(|(provider, _)| provider_verified(*provider))
+        .filter(|(provider, _)| provider_verified(*provider))
+        .find(|(provider, model)| in_live_catalog(*provider, model) != Some(false))
         .map(|(provider, model)| model_selection(*provider, *model))
 }
 

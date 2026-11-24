@@ -1,6 +1,6 @@
 use super::*;
 use crate::engines::model_assets::APPLE_FOUNDATION_MODEL_ID;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 static PROVIDER_LOCK: Mutex<()> = Mutex::new(());
 
@@ -10,23 +10,43 @@ struct ProviderStateGuard<'a> {
 
 impl Drop for ProviderStateGuard<'_> {
     fn drop(&mut self) {
-        reset_providers_verified();
+        reset_provider_state();
     }
 }
 
 fn with_verified_providers(providers: &[Provider]) -> ProviderStateGuard<'static> {
+    with_provider_state(providers, &[], &[])
+}
+
+fn with_provider_state(
+    verified: &[Provider],
+    live_stt: &[(Provider, &str)],
+    live_llm: &[(Provider, &str)],
+) -> ProviderStateGuard<'static> {
     let lock = PROVIDER_LOCK.lock().unwrap();
-    reset_providers_verified();
-    for provider in providers {
+    reset_provider_state();
+    for provider in verified {
         set_remote_provider_verified(*provider, true);
     }
+    set_cached_models(&CACHED_STT_MODELS, live_stt);
+    set_cached_models(&CACHED_LLM_MODELS, live_llm);
     ProviderStateGuard { _lock: lock }
 }
 
-fn reset_providers_verified() {
+fn set_cached_models(cache: &OnceLock<Mutex<Vec<ModelInfo>>>, models: &[(Provider, &str)]) {
+    *cache.get_or_init(|| Mutex::new(Vec::new())).lock().unwrap() = models
+        .iter()
+        .map(|(provider, id)| model_info(*provider, *id, false))
+        .collect();
+}
+
+fn reset_provider_state() {
     let cache = PROVIDER_VERIFIED.get_or_init(|| Mutex::new([false; 5]));
     let mut locked = cache.lock().unwrap();
     *locked = [false; 5];
+    drop(locked);
+    set_cached_models(&CACHED_STT_MODELS, &[]);
+    set_cached_models(&CACHED_LLM_MODELS, &[]);
     for model in model_assets::PARAKEET_MODELS {
         model_assets::set_parakeet_install_state_for_test(
             model.id,
@@ -111,6 +131,26 @@ mod remote_models {
         assert!(!excluded_remote_llm_model(Provider::OpenAi, "gpt-5.4-nano"));
         assert!(!excluded_remote_llm_model(Provider::Groq, "sora-2"));
     }
+
+    #[test]
+    fn guard_classifier_models_are_excluded_from_llm_picker() {
+        for id in [
+            "meta-llama/llama-prompt-guard-2-22m",
+            "openai/gpt-oss-safeguard-20b",
+            "meta-llama/llama-guard-4-12b",
+        ] {
+            assert!(excluded_remote_llm_model(Provider::Groq, id), "{id}");
+        }
+
+        assert!(!excluded_remote_llm_model(
+            Provider::Groq,
+            "llama-3.3-70b-versatile"
+        ));
+        assert!(!excluded_remote_llm_model(
+            Provider::Groq,
+            "openai/gpt-oss-20b"
+        ));
+    }
 }
 
 mod smart_defaults {
@@ -168,12 +208,12 @@ mod smart_defaults {
             (
                 &[Provider::Groq][..],
                 Provider::Groq,
-                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-3.3-70b-versatile",
             ),
             (
                 &[Provider::OpenAi, Provider::Groq][..],
                 Provider::Groq,
-                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "llama-3.3-70b-versatile",
             ),
         ];
 
@@ -234,7 +274,7 @@ mod smart_defaults {
         assert_selection(
             config.dictation.llm.as_ref().unwrap(),
             Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b-versatile",
         );
         assert!(config.dictation.smart_defaults_applied);
 
@@ -272,7 +312,96 @@ mod smart_defaults {
         assert_selection(
             config.dictation.llm.as_ref().unwrap(),
             Provider::Groq,
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b-versatile",
+        );
+    }
+
+    #[test]
+    fn apply_smart_defaults_repairs_llm_model_missing_from_live_catalog() {
+        let _state = with_provider_state(
+            &[Provider::Groq],
+            &[],
+            &[
+                (Provider::Groq, "llama-3.3-70b-versatile"),
+                (Provider::Groq, "openai/gpt-oss-20b"),
+            ],
+        );
+        let mut config = GlideConfig::default();
+        config.dictation.smart_defaults_applied = true;
+        config.dictation.llm = Some(ModelSelection {
+            provider: Provider::Groq,
+            model: "meta-llama/llama-4-scout-17b-16e-instruct".to_string(),
+        });
+
+        apply_smart_defaults(&mut config);
+
+        assert_selection(
+            config.dictation.llm.as_ref().unwrap(),
+            Provider::Groq,
+            "llama-3.3-70b-versatile",
+        );
+    }
+
+    #[test]
+    fn apply_smart_defaults_keeps_llm_selection_without_live_catalog() {
+        // No Groq entries in the cache means no basis to invalidate the selection.
+        let cases: [&[(Provider, &str)]; 2] = [&[], &[(Provider::OpenAi, "gpt-5.4-nano")]];
+
+        for live_llm in cases {
+            let _state = with_provider_state(&[Provider::Groq, Provider::OpenAi], &[], live_llm);
+            let mut config = GlideConfig::default();
+            config.dictation.smart_defaults_applied = true;
+            config.dictation.llm = Some(ModelSelection {
+                provider: Provider::Groq,
+                model: "some-user-chosen-model".to_string(),
+            });
+
+            apply_smart_defaults(&mut config);
+
+            assert_selection(
+                config.dictation.llm.as_ref().unwrap(),
+                Provider::Groq,
+                "some-user-chosen-model",
+            );
+        }
+    }
+
+    #[test]
+    fn llm_default_skips_candidates_missing_from_live_catalog() {
+        let _state = with_provider_state(
+            &[Provider::Groq, Provider::OpenAi],
+            &[],
+            &[
+                (Provider::Groq, "llama-3.1-8b-instant"),
+                (Provider::OpenAi, "gpt-5.4-nano"),
+            ],
+        );
+
+        let selection = smart_llm_default().unwrap();
+
+        assert_selection(&selection, Provider::OpenAi, "gpt-5.4-nano");
+    }
+
+    #[test]
+    fn apply_smart_defaults_repairs_stt_model_missing_from_live_catalog() {
+        let _state = with_provider_state(
+            &[Provider::Groq],
+            &[(Provider::Groq, "whisper-large-v3-turbo")],
+            &[],
+        );
+        let mut config = GlideConfig::default();
+        config.dictation.smart_defaults_applied = true;
+        config.dictation.stt = ModelSelection {
+            provider: Provider::Groq,
+            model: "whisper-large-v2".to_string(),
+        };
+
+        apply_smart_defaults(&mut config);
+
+        assert_selection(
+            &config.dictation.stt,
+            Provider::Groq,
+            "whisper-large-v3-turbo",
         );
     }
 
