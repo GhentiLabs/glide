@@ -1,11 +1,14 @@
+#[cfg(target_os = "macos")]
 use std::ffi::{c_char, c_void};
 
+#[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
     fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     static kCFBooleanTrue: *const c_void;
@@ -21,6 +24,7 @@ unsafe extern "C" {
     fn CFRelease(cf: *const c_void);
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
@@ -159,11 +163,18 @@ impl MicrophoneAuthorizationStatus {
 }
 
 /// Check if the app has Accessibility permission (needed for simulated paste via CoreGraphics).
+#[cfg(target_os = "macos")]
 pub fn has_accessibility_access() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn has_accessibility_access() -> bool {
+    false
+}
+
 /// Ask macOS to prompt/register this app in Privacy & Security > Accessibility.
+#[cfg(target_os = "macos")]
 pub fn request_accessibility_access() -> bool {
     unsafe {
         let keys = [kAXTrustedCheckOptionPrompt];
@@ -185,9 +196,20 @@ pub fn request_accessibility_access() -> bool {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn request_accessibility_access() -> bool {
+    false
+}
+
 /// Check if the app has Input Monitoring permission (needed for global hotkey via CGEventTap).
+#[cfg(target_os = "macos")]
 pub fn has_input_monitoring_access() -> bool {
     unsafe { CGPreflightListenEventAccess() }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn has_input_monitoring_access() -> bool {
+    false
 }
 
 /// Check if the app has Microphone permission (needed for audio capture via cpal).
@@ -238,8 +260,14 @@ pub fn request_accessibility_access_or_open_settings() -> bool {
     false
 }
 
+#[cfg(target_os = "macos")]
 fn open_settings_url(url: &str) {
     let _ = std::process::Command::new("open").arg(url).spawn();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_settings_url(url: &str) {
+    eprintln!("[glide] Settings URL is not supported on this platform: {url}");
 }
 
 #[cfg(not(target_os = "macos"))]

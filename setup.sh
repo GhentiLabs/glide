@@ -32,7 +32,15 @@ if ! command -v just &>/dev/null; then
 fi
 info "  just: $(just --version)"
 
-# ── 4. Rust / rustup ─────────────────────────────────────────────────────
+# ── 4. create-dmg ────────────────────────────────────────────────────────
+info "Checking create-dmg..."
+if ! command -v create-dmg &>/dev/null; then
+    warn "create-dmg not found — installing via Homebrew..."
+    brew install create-dmg
+fi
+info "  create-dmg: $(create-dmg --version 2>/dev/null || echo installed)"
+
+# ── 5. Rust / rustup ─────────────────────────────────────────────────────
 info "Checking Rust..."
 if ! command -v rustup &>/dev/null; then
     warn "rustup not found — installing Rust..."
@@ -41,7 +49,7 @@ if ! command -v rustup &>/dev/null; then
 fi
 info "  Rust: $(rustc --version)"
 
-# ── 5. Smoke test ────────────────────────────────────────────────────────
+# ── 6. Smoke test ────────────────────────────────────────────────────────
 cd "$REPO_DIR"
 info "Running smoke test (cargo check)..."
 cargo check
@@ -52,5 +60,6 @@ info ""
 info "Commands:"
 info "  just dev           # debug build + run (macOS)"
 info "  just build         # release build + .app bundle (macOS)"
+info "  just dmg           # signed + notarized release DMG (macOS)"
 info "  just test          # run all tests"
 info "  just               # list all recipes"

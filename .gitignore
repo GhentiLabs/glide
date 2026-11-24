@@ -22,9 +22,16 @@ target/
 *.png
 !assets/icons/*.png
 !assets/screenshots/*.png
+!assets/dmg/*.png
 
 # Environment / secrets
 .env
+*.cer
+*.key
+*.p12
+*.pem
+*.mobileprovision
+*.provisionprofile
 
 .omx/
 .antigravitycli/

@@ -1,6 +1,6 @@
 use std::{env, fs, path::Path, path::PathBuf, process::Command};
 
-const DEFAULT_APPLE_TEAM_ID: &str = "3C99V29U26";
+const DEFAULT_APPLE_TEAM_ID: &str = "KSH6P6Y39N";
 const APPLE_HELPER_SOURCES: &[&str] = &[
     "macos/GlideAppleHelper/Main.swift",
     "macos/GlideAppleHelper/Types.swift",

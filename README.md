@@ -143,6 +143,27 @@ To compile Glide from source, you will need:
    just build
    ```
 
+### Release Packaging
+
+To build the signed and notarized macOS DMG, install `create-dmg`, store notarization credentials in your local Keychain, then run:
+
+```bash
+brew install create-dmg
+xcrun notarytool store-credentials glide-notary --team-id KSH6P6Y39N
+just dmg
+```
+
+Signing certificates, private keys, Apple ID passwords, app-specific passwords, and notary credentials must stay out of git. `release-dmg.sh` reads signing identities and notarization credentials from Keychain only. Set `GLIDE_APPLE_CODESIGN_IDENTITY`, `GLIDE_APPLE_TEAM_ID`, or `GLIDE_NOTARY_KEYCHAIN_PROFILE` only to select existing local Keychain entries.
+
+To compile release binaries for other platforms:
+
+```bash
+just build-native   # current OS
+just build-windows  # native on Windows, cargo-xwin from macOS
+just build-linux    # native on Linux, cross from macOS
+just build-cross    # Windows x64 and Linux x64/ARM from macOS
+```
+
 ---
 
 ## ⚙️ Configuration

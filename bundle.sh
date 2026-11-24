@@ -5,16 +5,16 @@ set -euo pipefail
 # Usage: ./bundle.sh [--debug] [--sign|--no-sign]
 
 PROFILE="release"
-CARGO_FLAG="--release"
+CARGO_ARGS=(--release)
 SIGN_MODE="auto"
-TEAM_ID="${GLIDE_APPLE_TEAM_ID:-${APPLE_TEAM_ID:-3C99V29U26}}"
+TEAM_ID="${GLIDE_APPLE_TEAM_ID:-${APPLE_TEAM_ID:-KSH6P6Y39N}}"
 IDENTITY="${GLIDE_APPLE_CODESIGN_IDENTITY:-${APPLE_CODESIGN_IDENTITY:-}}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --debug)
             PROFILE="debug"
-            CARGO_FLAG=""
+            CARGO_ARGS=()
             ;;
         --sign)
             SIGN_MODE="required"
@@ -61,6 +61,22 @@ find_codesign_identity() {
         '
 }
 
+verify_audio_input_entitlement() {
+    local app="$1"
+    local enabled
+
+    enabled="$(
+        codesign -d --entitlements :- "$app" 2>/dev/null \
+            | plutil -extract 'com\.apple\.security\.device\.audio-input' raw -o - - 2>/dev/null \
+            || true
+    )"
+    if [[ "$enabled" != "true" ]]; then
+        echo "Signed app is missing the com.apple.security.device.audio-input entitlement." >&2
+        echo "Refusing to produce a Glide build that macOS cannot authorize for microphone capture." >&2
+        exit 1
+    fi
+}
+
 if [[ "$SIGN_MODE" != "never" ]]; then
     IDENTITY="$(find_codesign_identity || true)"
     if [[ "$SIGN_MODE" == "required" && -z "$IDENTITY" ]]; then
@@ -76,13 +92,11 @@ if [[ -n "$IDENTITY" ]]; then
 fi
 
 echo "Building Glide ($PROFILE)..."
-cargo build $CARGO_FLAG
+cargo build "${CARGO_ARGS[@]}"
 
 echo "Creating app bundle..."
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
-mkdir -p "$APP/Contents/Resources/assets/icons"
-mkdir -p "$HELPER_APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets/icons" "$HELPER_APP/Contents/MacOS"
 
 # Binary
 cp "$ROOT/target/$PROFILE/Glide" "$APP/Contents/MacOS/Glide"
@@ -90,28 +104,7 @@ HELPER="$(find "$ROOT/target/$PROFILE/build" -path '*/out/GlideAppleHelper' -typ
 if [[ -n "$HELPER" ]]; then
     cp "$HELPER" "$HELPER_APP/Contents/MacOS/GlideAppleHelper"
     HELPER_INFO="$(dirname "$HELPER")/GlideAppleHelper-Info.plist"
-    if [[ -f "$HELPER_INFO" ]]; then
-        cp "$HELPER_INFO" "$HELPER_APP/Contents/Info.plist"
-    else
-        cat > "$HELPER_APP/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key>
-  <string>GlideAppleHelper</string>
-  <key>CFBundleIdentifier</key>
-  <string>com.ghenti.glide.mac.apple-helper</string>
-  <key>CFBundleName</key>
-  <string>Glide Apple Helper</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>NSSpeechRecognitionUsageDescription</key>
-  <string>Glide uses Apple Speech for local on-device dictation when selected.</string>
-</dict>
-</plist>
-PLIST
-    fi
+    cp "$HELPER_INFO" "$HELPER_APP/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $HELPER_BUNDLE_ID" "$HELPER_APP/Contents/Info.plist"
 fi
 
@@ -143,6 +136,7 @@ if [[ "$SIGN_MODE" != "never" ]]; then
         codesign --force --timestamp --options runtime --sign "$IDENTITY" \
             --entitlements "$ENTITLEMENTS" \
             "$APP"
+        verify_audio_input_entitlement "$APP"
     elif [[ -n "$TEAM_ID" ]]; then
         echo "Signing skipped: no valid code-signing identity found for Apple team $TEAM_ID." >&2
         echo "Apple Speech locale assets require a signed helper." >&2

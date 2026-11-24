@@ -1,11 +1,11 @@
-# Glide - desktop build system
+# Glide - macOS build system
 # Install: brew install just  (or: cargo install just)
 # Usage:   just              (list all recipes)
-#          just dev           (debug build + run for current OS)
-#          just build         (release build + package for current OS)
+#          just dev           (debug build + run)
+#          just build         (release build + .app bundle)
+#          just dmg           (signed + notarized release DMG)
 
 ROOT := justfile_directory()
-current_os := if os() == "macos" { "mac" } else { os() }
 
 # List available recipes
 default:
@@ -13,29 +13,39 @@ default:
 
 # ─── Primary Commands ─────────────────────────────────────────────────────────
 
-# Debug build + auto-run (platform: mac, linux, windows)
-dev platform=current_os:
-    @just _dev-{{platform}}
-
-# Release build + package artifacts (platform: mac, linux, windows)
-build platform=current_os:
-    @just _build-{{platform}}
-
-# ─── macOS ────────────────────────────────────────────────────────────────────
-
-[private]
-_dev-mac:
+# Debug build + run
+dev:
     cargo run
 
-[private]
-_build-mac:
-    {{ROOT}}/bundle.sh
+# Release build + .app bundle
+build:
+    "{{ROOT}}/bundle.sh"
+
+# Signed and notarized macOS DMG
+dmg:
+    "{{ROOT}}/release-dmg.sh"
+
+# Native release binary for the current OS
+build-native:
+    "{{ROOT}}/build-platforms.sh" native
+
+# Windows release binary; native on Windows, cargo-xwin from macOS
+build-windows:
+    "{{ROOT}}/build-platforms.sh" windows
+
+# Linux release binaries; native on Linux, cross from macOS
+build-linux:
+    "{{ROOT}}/build-platforms.sh" linux
+
+# Windows x64 and Linux x64/ARM release binaries from macOS
+build-cross:
+    "{{ROOT}}/build-platforms.sh" all
 
 # Debug app bundle, requiring a valid Apple code-signing identity.
 dev-signed: _stop-dev-signed
     rm -f "{{ROOT}}/target/debug/Glide" "{{ROOT}}/target/debug/Glide.app/Contents/MacOS/Glide"
-    {{ROOT}}/bundle.sh --debug --sign
-    open {{ROOT}}/target/debug/Glide.app
+    "{{ROOT}}/bundle.sh" --debug --sign
+    open "{{ROOT}}/target/debug/Glide.app"
 
 [private]
 _stop-dev-signed:
@@ -46,26 +56,6 @@ _stop-dev-signed:
         sleep 0.1; \
     done; \
     pkill -KILL -f "{{ROOT}}/target/debug/[G]lide.app/Contents/MacOS/Glide" || true
-
-# ─── Linux ────────────────────────────────────────────────────────────────────
-
-[private]
-_dev-linux:
-    cargo run
-
-[private]
-_build-linux:
-    cargo build --release
-
-# ─── Windows ──────────────────────────────────────────────────────────────────
-
-[private]
-_dev-windows:
-    cargo run
-
-[private]
-_build-windows:
-    cargo build --release
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 

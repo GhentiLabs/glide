@@ -8,13 +8,19 @@ use crate::config::PasteConfig;
 const CLIPBOARD_SETTLE_DELAY_MS: u64 = 50;
 const MIN_RESTORE_DELAY_MS: u64 = 750;
 
+#[cfg(target_os = "macos")]
 type CGEventRef = *mut std::ffi::c_void;
+#[cfg(target_os = "macos")]
 type CGEventSourceRef = *mut std::ffi::c_void;
 
+#[cfg(target_os = "macos")]
 const K_CG_HID_EVENT_TAP: u32 = 0;
+#[cfg(target_os = "macos")]
 const K_CG_EVENT_FLAG_MASK_COMMAND: u64 = 0x00100000;
+#[cfg(target_os = "macos")]
 const KVK_V: u16 = 9;
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
     fn CGEventCreateKeyboardEvent(
@@ -26,11 +32,13 @@ unsafe extern "C" {
     fn CGEventPost(tap: u32, event: CGEventRef);
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     fn CFRelease(cf: *const std::ffi::c_void);
 }
 
+#[cfg(target_os = "macos")]
 pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
     anyhow::ensure!(
         crate::platform::permissions::has_accessibility_access(),
@@ -53,6 +61,11 @@ pub fn paste_text(text: &str, config: &PasteConfig) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn paste_text(_text: &str, _config: &PasteConfig) -> Result<()> {
+    anyhow::bail!("paste simulation is not implemented on this platform yet")
+}
+
 fn previous_clipboard_text(clipboard: &mut Clipboard, config: &PasteConfig) -> Option<String> {
     config
         .restore_clipboard
@@ -65,6 +78,7 @@ fn set_clipboard_text(clipboard: &mut Clipboard, text: String) -> Result<()> {
 }
 
 /// Simulate Cmd+V using CoreGraphics keyboard events.
+#[cfg(target_os = "macos")]
 fn simulate_paste() {
     unsafe {
         post_command_v_event(true);
@@ -72,6 +86,7 @@ fn simulate_paste() {
     }
 }
 
+#[cfg(target_os = "macos")]
 unsafe fn post_command_v_event(key_down: bool) {
     let event = unsafe { CGEventCreateKeyboardEvent(std::ptr::null_mut(), KVK_V, key_down) };
     unsafe {
