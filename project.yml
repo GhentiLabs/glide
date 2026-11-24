@@ -1,0 +1,56 @@
+name: Glide
+options:
+  bundleIdPrefix: com.ghentilabs
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  GlideKit:
+    path: Packages/GlideKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: KSH6P6Y39N
+    CODE_SIGN_STYLE: Manual
+    # Developer ID for every build, so macOS keeps the Accessibility and Microphone grants across rebuilds.
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    ENABLE_HARDENED_RUNTIME: YES
+    ARCHS: arm64
+targets:
+  Glide:
+    type: application
+    platform: macOS
+    sources: [Glide]
+    dependencies:
+      - package: GlideKit
+        product: GlideCore
+      - package: GlideKit
+        product: HotkeyEngine
+      - package: GlideKit
+        product: AudioCapture
+      - package: GlideKit
+        product: Recognizer
+      - package: GlideKit
+        product: Inserter
+      - package: GlideKit
+        product: Overlay
+    info:
+      path: Glide/Info.plist
+      properties:
+        CFBundleDisplayName: Glide
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        LSUIElement: true
+        NSMicrophoneUsageDescription: Glide listens while you hold the hotkey and turns what you say into text.
+        NSHumanReadableCopyright: © 2026 Ghenti Labs
+    entitlements:
+      path: Glide/Glide.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ghentilabs.glide
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
