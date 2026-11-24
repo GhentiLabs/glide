@@ -10,7 +10,7 @@ public enum Inserter {
     /// How long the front app gets to read the pasteboard before it is restored.
     private static let restoreDelay = Duration.milliseconds(300)
 
-    public static func paste(_ text: String) async {
+    public static func paste(_ text: String) {
         let board = NSPasteboard.general
         let saved = snapshot(board)
         board.clearContents()
@@ -21,11 +21,14 @@ public enum Inserter {
         board.writeObjects([item])
         let ours = board.changeCount
         postCommandV()
-        try? await Task.sleep(for: restoreDelay)
-        // Something else wrote to the clipboard meanwhile; theirs wins.
-        guard board.changeCount == ours else { return }
-        board.clearContents()
-        if !saved.isEmpty { board.writeObjects(saved) }
+        // Restore later without holding up the caller, so timings measure the paste itself.
+        Task {
+            try? await Task.sleep(for: restoreDelay)
+            // Something else wrote to the clipboard meanwhile; theirs wins.
+            guard board.changeCount == ours else { return }
+            board.clearContents()
+            if !saved.isEmpty { board.writeObjects(saved) }
+        }
     }
 
     private static func snapshot(_ board: NSPasteboard) -> [NSPasteboardItem] {

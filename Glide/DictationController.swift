@@ -117,7 +117,7 @@ final class DictationController {
                 log.notice("recognizer returned no text")
                 return show(.error(.nothingHeard))
             }
-            await Inserter.paste(text)
+            Inserter.paste(text)
             let ms = (ContinuousClock.now - released) / .milliseconds(1)
             log.notice("release to paste: \(Int(ms)) ms for \(samples.count / 16) ms of audio")
             show(.completed)
