@@ -6,6 +6,7 @@ public enum BarAnchor: String, CaseIterable, Sendable {
     case bottom, bottomLeft, bottomRight, top, topLeft, topRight, left, right
 
     var isVertical: Bool { self == .left || self == .right }
+    var isCorner: Bool { [.bottomLeft, .bottomRight, .topLeft, .topRight].contains(self) }
 
     /// The screen edges the bar touches here.
     var edges: Edge.Set {
@@ -28,9 +29,30 @@ public enum BarAnchor: String, CaseIterable, Sendable {
         return CGPoint(x: x, y: y)
     }
 
+    /// Corners count as closer than they are, so they catch a drop from further away.
     static func nearest(to point: CGPoint, in frame: CGRect) -> BarAnchor {
-        allCases.min { hypot($0.point(in: frame).x - point.x, $0.point(in: frame).y - point.y)
-            < hypot($1.point(in: frame).x - point.x, $1.point(in: frame).y - point.y) }!
+        func distance(_ anchor: BarAnchor) -> CGFloat {
+            let p = anchor.point(in: frame)
+            return hypot(p.x - point.x, p.y - point.y) * (anchor.isCorner ? 0.6 : 1)
+        }
+        return allCases.min { distance($0) < distance($1) }!
+    }
+
+    /// The edge the bar grows out of.
+    var edge: Edge {
+        switch self {
+        case .bottom, .bottomLeft, .bottomRight: .bottom
+        case .top, .topLeft, .topRight: .top
+        case .left: .leading
+        case .right: .trailing
+        }
+    }
+
+    /// Where the bar sits inside its panel.
+    var alignment: Alignment {
+        let h: HorizontalAlignment = edges.contains(.leading) ? .leading : edges.contains(.trailing) ? .trailing : .center
+        let v: VerticalAlignment = edges.contains(.bottom) ? .bottom : edges.contains(.top) ? .top : .center
+        return Alignment(horizontal: h, vertical: v)
     }
 }
 

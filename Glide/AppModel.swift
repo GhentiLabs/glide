@@ -17,19 +17,33 @@ final class AppModel {
     let store = Store(directory: Store.defaultDirectory)
     let bar = BarModel()
     /// 0...1 while the model downloads or loads; nil once it is ready.
-    private(set) var modelProgress: Double? = 0
+    private(set) var modelProgress: Double? = 0 {
+        didSet { bar.progress = modelProgress }
+    }
     private(set) var modelFailed = false
     private(set) var hasAccessibility = AXIsProcessTrusted()
     private(set) var hasMicrophone = AudioRecorder.isAuthorized
     private(set) var microphones = AudioRecorder.microphones
     var paused = false {
-        didSet { listener?.setPaused(paused) }
+        didSet {
+            listener?.setPaused(paused)
+            bar.paused = paused
+        }
     }
     var microphoneID: String {
         didSet {
             UserDefaults.standard.set(microphoneID, forKey: "microphoneID")
             recorder.microphoneID = microphoneID.isEmpty ? nil : microphoneID
         }
+    }
+    /// The app the user last worked in, named in the Home headline.
+    private(set) var lastApp: NSRunningApplication?
+    /// Getting-started tasks Home ticks off.
+    var usedHandsFree = UserDefaults.standard.bool(forKey: "usedHandsFree") {
+        didSet { UserDefaults.standard.set(usedHandsFree, forKey: "usedHandsFree") }
+    }
+    var usedPasteLast = UserDefaults.standard.bool(forKey: "usedPasteLast") {
+        didSet { UserDefaults.standard.set(usedPasteLast, forKey: "usedPasteLast") }
     }
     /// The first-run hotkey check: the key works, but nothing is transcribed.
     var listenOnly = false
@@ -52,6 +66,12 @@ final class AppModel {
     init() {
         microphoneID = UserDefaults.standard.string(forKey: "microphoneID") ?? ""
         recorder.microphoneID = microphoneID.isEmpty ? nil : microphoneID
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated { if app?.bundleIdentifier != Bundle.main.bundleIdentifier { self?.lastApp = app } }
+        }
         Task { await launch() }
     }
 
@@ -162,10 +182,12 @@ final class AppModel {
         switch action {
         case .start:
             guard !micTesting else { return }
-            guard modelProgress == nil else {
+            if let modelProgress {
+                if modelFailed { return show(.error(.modelUnavailable)) }
                 show(.initializing)
-                if modelFailed { show(.error(.modelUnavailable)) }
-                return
+                return bar.show(Toast(
+                    symbol: "arrow.down.circle", title: "Glide is almost ready",
+                    message: "The speech model is \(Int(modelProgress * 100))% loaded.", duration: 4))
             }
             guard AudioRecorder.isAuthorized else {
                 log.error("microphone not authorized")
@@ -187,7 +209,10 @@ final class AppModel {
                 show(.error(.microphoneDenied))
             }
         case .latchHandsFree:
-            if recording { show(.recording(handsFree: true)) }
+            if recording {
+                show(.recording(handsFree: true))
+                if !listenOnly { usedHandsFree = true }
+            }
         case .cancel:
             guard recording else { return show(.idle) }
             log.notice("cancelled")
@@ -248,28 +273,28 @@ final class AppModel {
         }
         let smart = UserDefaults.standard.object(forKey: "smartSpacing") as? Bool ?? true
         let text = smart ? Refiner.join(refined, after: field.before, isCommonWord: Self.isCommonWord) : refined
-        Inserter.paste(text)
         log.notice("release to paste: \(Int((ContinuousClock.now - released) / .milliseconds(1))) ms for \(samples.count / 16) ms of audio")
         show(.completed)
-        Task { await confirm(text, replacing: field) }
         offerHandsFreeTip()
+        if !(await Inserter.paste(text)) { await insertUnread(text, into: field) }
     }
 
-    /// If the field could be read and did not change, the paste did not land: write through Accessibility instead.
-    private func confirm(_ text: String, replacing field: FieldSnapshot) async {
+    /// No app read the paste. If the field is readable and unchanged, write through Accessibility instead.
+    /// Only after the read timed out, so the two paths never both land.
+    private func insertUnread(_ text: String, into field: FieldSnapshot) async {
         guard let before = field.value else { return }
-        try? await Task.sleep(for: .milliseconds(250))
-        let landed = await Task.detached { FieldContext.currentValue() != before }.value
-        guard !landed else { return }
+        let unchanged = await Task.detached { FieldContext.currentValue() == before }.value
+        guard unchanged else { return }
         let inserted = await Task.detached { FieldContext.insert(text) }.value
-        log.notice("paste did not land; accessibility insert \(inserted ? "worked" : "failed", privacy: .public)")
+        log.notice("paste was never read; accessibility insert \(inserted ? "worked" : "failed", privacy: .public)")
     }
 
     private func pasteLast() {
         guard let lastTranscript else {
             return bar.show(Toast(symbol: "text.cursor", title: "Nothing to paste yet", duration: 3))
         }
-        Inserter.paste(lastTranscript)
+        usedPasteLast = true
+        Task { await Inserter.paste(lastTranscript) }
     }
 
     private func offerHandsFreeTip() {

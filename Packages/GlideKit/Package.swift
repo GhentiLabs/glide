@@ -36,5 +36,6 @@ let package = Package(
         .testTarget(name: "OverlayTests", dependencies: ["Overlay"]),
         .testTarget(name: "RefinerTests", dependencies: ["Refiner", "GlideCore"]),
         .testTarget(name: "StoreTests", dependencies: ["Store", "GlideCore"]),
+        .testTarget(name: "InserterTests", dependencies: ["Inserter"]),
     ]
 )

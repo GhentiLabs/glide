@@ -1,6 +1,7 @@
 import AppKit
 import Recognizer
 import ServiceManagement
+import GlideCore
 import SwiftUI
 
 struct SettingsView: View {
@@ -51,17 +52,6 @@ private struct HotkeySettings: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-struct Keycap: View {
-    let label: String
-    init(_ label: String) { self.label = label }
-
-    var body: some View {
-        Text(label).font(.system(.callout, design: .rounded).weight(.medium))
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
     }
 }
 

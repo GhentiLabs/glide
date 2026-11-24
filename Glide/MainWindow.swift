@@ -14,52 +14,35 @@ struct MainWindow: View {
                 Label("Dictionary", systemImage: "book.closed").tag(Section.dictionary)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210)
-            .safeAreaInset(edge: .bottom) { AccountButton() }
+            .safeAreaInset(edge: .bottom) { PrivacyCard() }
         } detail: {
             switch section {
             case .home: HomeView()
             case .dictionary: DictionaryView()
             }
         }
-        .frame(minWidth: 720, minHeight: 460)
+        .frame(minWidth: 760, minHeight: 520)
         .tint(Tokens.tint)
     }
 }
 
-/// Bottom left of the sidebar. Accounts don't exist yet; the popover says so.
-private struct AccountButton: View {
+/// Bottom left of the sidebar, where an account will go. Until then it says where your data lives.
+private struct PrivacyCard: View {
     @Environment(AppModel.self) private var app
-    @State private var showing = false
 
     var body: some View {
-        Button { showing.toggle() } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "person.crop.circle.fill").font(.system(size: 24)).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Local profile").font(.callout.weight(.medium))
-                    Text("On this Mac").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            Image(systemName: "lock.laptopcomputer").font(.system(size: 17)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("On this Mac").font(.callout.weight(.medium))
+                Text("Audio and history stay here").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            Button("Settings", systemImage: "gearshape") { app.open("settings") }
+                .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .padding(8)
-        .popover(isPresented: $showing, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Accounts aren't available yet").font(.headline)
-                Text("Glide keeps your history and dictionary on this Mac.").foregroundStyle(.secondary)
-                Button("Open Settings") {
-                    showing = false
-                    app.open("settings")
-                }
-                .padding(.top, 4)
-            }
-            .padding(16)
-            .frame(width: 270, alignment: .leading)
-        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(10)
     }
 }
 
@@ -82,23 +65,44 @@ struct HomeView: View {
 
     var body: some View {
         let groups = groups
-        List {
-            ForEach(groups, id: \.day) { group in
-                Section(Self.title(for: group.day)) {
-                    ForEach(group.records) { HistoryRow(record: $0) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                Headline()
+                if !app.store.records.isEmpty { Stats(records: app.store.records) }
+                GettingStarted()
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("History").font(.title3.weight(.semibold))
+                        Spacer()
+                        SearchPill(query: $query)
+                    }
+                    if app.store.records.isEmpty {
+                        ContentUnavailableView(
+                            "No dictations yet", systemImage: "waveform",
+                            description: Text("Hold fn in any app and speak. What you say shows up here."))
+                            .frame(maxWidth: .infinity).card()
+                    } else if groups.isEmpty {
+                        ContentUnavailableView.search(text: query).frame(maxWidth: .infinity).card()
+                    }
+                    ForEach(groups, id: \.day) { group in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(Self.title(for: group.day)).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                            VStack(spacing: 0) {
+                                ForEach(group.records) { record in
+                                    HistoryRow(record: record)
+                                    if record.id != group.records.last?.id { Divider().padding(.leading, 74) }
+                                }
+                            }
+                            .card(padding: 6)
+                        }
+                    }
                 }
             }
+            .padding(28)
+            .frame(maxWidth: Tokens.contentWidth)
+            .frame(maxWidth: .infinity)
         }
-        .overlay {
-            if app.store.records.isEmpty {
-                ContentUnavailableView(
-                    "No dictations yet", systemImage: "waveform",
-                    description: Text("Hold fn in any app and speak. What you say shows up here."))
-            } else if groups.isEmpty {
-                ContentUnavailableView.search(text: query)
-            }
-        }
-        .searchable(text: $query, placement: .toolbar)
+        .background(Tokens.canvas)
         .navigationTitle("Home")
     }
 
@@ -110,6 +114,130 @@ struct HomeView: View {
     }
 }
 
+/// "Hold fn to dictate in Messages", or what stands in the way.
+private struct Headline: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if app.paused {
+                Text("Glide is paused")
+                Spacer()
+                Button("Resume") { app.paused = false }.buttonStyle(.borderedProminent)
+            } else if !app.hasAccessibility {
+                Text("Glide needs Accessibility")
+                Spacer()
+                Button("Open Settings", action: app.guideAccessibility).buttonStyle(.borderedProminent)
+            } else if let progress = app.modelProgress, !app.modelFailed {
+                Text("Getting ready")
+                ProgressView(value: progress).frame(width: 120)
+                Text("\(Int(progress * 100))%").monospacedDigit().foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                Text("Hold")
+                Keycap("fn", size: 20)
+                Text("to dictate")
+                if let lastApp = app.lastApp, let name = lastApp.localizedName {
+                    Text("in")
+                    if let icon = lastApp.icon { Image(nsImage: icon).resizable().frame(width: 28, height: 28) }
+                    Text(name)
+                }
+                Spacer()
+            }
+        }
+        .font(.system(size: 24, weight: .semibold, design: .rounded))
+        .lineLimit(1)
+        .animation(Tokens.spring, value: app.lastApp)
+    }
+}
+
+private struct Stats: View {
+    let records: [DictationRecord]
+
+    var body: some View {
+        let words = records.reduce(0) { $0 + ($1.finalText ?? $1.refinedText).split(whereSeparator: \.isWhitespace).count }
+        // Typing at 40 words a minute against speaking at 150.
+        let minutesSaved = Int((Double(words) / 40 - Double(words) / 150).rounded())
+        let today = records.filter { Calendar.current.isDateInToday($0.time) }.count
+        HStack(spacing: 0) {
+            tile("Words dictated", value: words.formatted(), unit: "words")
+            tile("Time saved", value: minutesSaved >= 60 ? "\(minutesSaved / 60) hr \(minutesSaved % 60)" : "\(minutesSaved)", unit: "min")
+            tile("Today", value: today.formatted(), unit: today == 1 ? "dictation" : "dictations")
+        }
+        .card(padding: 18)
+    }
+
+    private func tile(_ title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value).font(.system(size: 26, weight: .semibold, design: .rounded)).monospacedDigit()
+                Text(unit).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A few first tasks that tick themselves off; the row leaves once they're all done.
+private struct GettingStarted: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let tasks: [(symbol: String, title: String, detail: String, done: Bool)] = [
+            ("mic", "Your first dictation", "Hold fn anywhere and speak.", !app.store.records.isEmpty),
+            ("hand.tap", "Go hands-free", "Double-tap fn, then tap it again to finish.", app.usedHandsFree),
+            ("doc.on.clipboard", "Paste the last one", "Press ⌃⌘V to paste your last dictation again.", app.usedPasteLast),
+        ]
+        if tasks.contains(where: { !$0.done }) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Getting started").font(.title3.weight(.semibold))
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(tasks, id: \.title) { task in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: task.symbol).foregroundStyle(Tokens.tint)
+                                Spacer()
+                                Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.done ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.tertiary))
+                            }
+                            .font(.title3)
+                            Text(task.title).font(.headline)
+                            Text(task.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .card(padding: 16)
+                        .opacity(task.done ? 0.6 : 1)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue(task.done ? "Done" : "Not done")
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .transition(.opacity)
+        }
+    }
+}
+
+private struct SearchPill: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search", text: $query).textFieldStyle(.plain)
+            if !query.isEmpty {
+                Button("Clear", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(width: 220)
+        .background(Capsule().fill(.quaternary.opacity(0.6)))
+    }
+}
+
 private struct HistoryRow: View {
     let record: DictationRecord
     @State private var hovering = false
@@ -117,20 +245,24 @@ private struct HistoryRow: View {
 
     private var text: String { record.finalText ?? record.refinedText }
 
-    private var appName: String? {
+    private var app: (name: String, icon: NSImage)? {
         guard let id = record.app, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
-        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        return (FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: ""), NSWorkspace.shared.icon(forFile: url.path))
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(record.time, format: .dateTime.hour().minute())
-                .monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(text).textSelection(.enabled)
-                if let appName { Text(appName).font(.caption).foregroundStyle(.secondary) }
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 46, alignment: .leading)
+            Group {
+                if let app {
+                    Image(nsImage: app.icon).resizable().frame(width: 16, height: 16).help(app.name).accessibilityLabel(app.name)
+                } else {
+                    Color.clear.frame(width: 16, height: 16)
+                }
             }
-            Spacer(minLength: 8)
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
+            Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
@@ -140,14 +272,15 @@ private struct HistoryRow: View {
                     copied = false
                 }
             } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.borderless)
             .help("Copy")
-            .accessibilityLabel("Copy")
+            .accessibilityLabel(copied ? "Copied" : "Copy")
             .opacity(hovering || copied ? 1 : 0)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(.quaternary.opacity(hovering ? 0.35 : 0)))
         .onHover { hovering = $0 }
     }
 }

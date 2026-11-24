@@ -54,3 +54,43 @@ public struct CaretMark: View {
         .accessibilityLabel("Glide")
     }
 }
+
+/// A key drawn as a slightly raised cap. Takes the surrounding foreground colour, so it works on the bar and in windows.
+public struct Keycap: View {
+    let key: String
+    var size: CGFloat
+
+    public init(_ key: String, size: CGFloat = 12) {
+        self.key = key
+        self.size = size
+    }
+
+    public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.45)
+        Text(key).font(.system(size: size, weight: .semibold, design: .rounded))
+            .padding(.horizontal, size * 0.55).padding(.vertical, size * 0.18)
+            .background(shape.fill(.foreground.opacity(0.13)))
+            .overlay(shape.strokeBorder(.foreground.opacity(0.2), lineWidth: 0.5))
+            .background(shape.fill(.foreground.opacity(0.12)).offset(y: size * 0.12))
+            .fixedSize()
+    }
+}
+
+/// Window surfaces: a warm canvas with content in raised cards.
+extension Tokens {
+    public static let canvas = Color(light: 0xF6F4F2, dark: 0x1D1C1B)
+    public static let cardFill = Color(light: 0xFFFFFF, dark: 0x2A2928)
+    public static let cardRadius: CGFloat = 14
+    /// Page content stops widening here, so lines stay readable.
+    public static let contentWidth: CGFloat = 760
+}
+
+extension View {
+    /// A raised card with a hairline edge; the one container windows use.
+    public func card(padding: CGFloat = 20) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Tokens.cardRadius)
+        return self.padding(padding)
+            .background(shape.fill(Tokens.cardFill))
+            .overlay(shape.strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+    }
+}
