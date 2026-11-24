@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// Listens for fn/Globe and Escape through an active HID-level event tap on its own thread.
+/// Listens for fn/Globe, Escape and Control-Command-V through an active HID-level event tap on its own thread.
 /// shortcut: fn is the only binding; the session-level tap for other keys and mouse buttons arrives with the Hotkeys settings (M4).
 public final class HotkeyListener: @unchecked Sendable {
     public enum ListenerError: Error { case notTrusted }
@@ -9,16 +9,33 @@ public final class HotkeyListener: @unchecked Sendable {
     private static let fnKeyCode: Int64 = 63
     private static let escapeKeyCode: Int64 = 53
 
+    private static let vKeyCode: Int64 = 9
+
     private let onAction: @Sendable (HotkeyGesture.Action) -> Void
-    // Touched only on the tap thread.
+    private let onPasteLast: @Sendable () -> Void
+    private let lock = NSLock()
+    // Guarded by `lock`: the tap thread and the main thread both touch them.
     private var gesture = HotkeyGesture()
     private var fnDown = false
+    private var paused = false
     private var tap: CFMachPort?
 
-    /// `onAction` is called on the main queue.
-    public init(onAction: @escaping @Sendable (HotkeyGesture.Action) -> Void) {
+    /// Both callbacks run on the main queue.
+    public init(onAction: @escaping @Sendable (HotkeyGesture.Action) -> Void, onPasteLast: @escaping @Sendable () -> Void) {
         self.onAction = onAction
+        self.onPasteLast = onPasteLast
     }
+
+    /// While paused every key passes through untouched.
+    public func setPaused(_ value: Bool) {
+        lock.withLock {
+            paused = value
+            gesture = HotkeyGesture()
+        }
+    }
+
+    /// Forget the current gesture, after a recording ended some other way (the bar's stop button).
+    public func reset() { lock.withLock { gesture = HotkeyGesture() } }
 
     /// Needs Accessibility trust; throws `notTrusted` without it.
     public func start() throws {
@@ -45,30 +62,41 @@ public final class HotkeyListener: @unchecked Sendable {
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        // Not event.timestamp: on Apple silicon it counts mach ticks, not nanoseconds, which made every hold look like a tap.
-        let t = ProcessInfo.processInfo.systemUptime
-        var action: HotkeyGesture.Action?
-        var swallow = false
-        switch type {
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
-        case .flagsChanged where event.getIntegerValueField(.keyboardEventKeycode) == Self.fnKeyCode:
-            let down = event.flags.contains(.maskSecondaryFn)
-            guard down != fnDown else { return Unmanaged.passUnretained(event) }
-            fnDown = down
-            action = down ? gesture.keyDown(at: t) : gesture.keyUp(at: t)
-            swallow = true  // keeps macOS from opening the emoji picker or its own dictation
-        case .keyDown where event.getIntegerValueField(.keyboardEventKeycode) == Self.escapeKeyCode:
-            action = gesture.escape()
-            swallow = action != nil
-        default:
-            break
+        }
+        // Not event.timestamp: on Apple silicon it counts mach ticks, not nanoseconds, which made every hold look like a tap.
+        let t = ProcessInfo.processInfo.systemUptime
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        var action: HotkeyGesture.Action?
+        var pasteLast = false
+        let swallow: Bool = lock.withLock {
+            guard !paused else { return false }
+            switch type {
+            case .flagsChanged where keyCode == Self.fnKeyCode:
+                let down = event.flags.contains(.maskSecondaryFn)
+                guard down != fnDown else { return false }
+                fnDown = down
+                action = down ? gesture.keyDown(at: t) : gesture.keyUp(at: t)
+                return true  // keeps macOS from opening the emoji picker or its own dictation
+            case .keyDown where keyCode == Self.escapeKeyCode:
+                action = gesture.escape()
+                return action != nil
+            case .keyDown where keyCode == Self.vKeyCode
+                && event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == [.maskCommand, .maskControl]:
+                // shortcut: physical V key; a layout-aware binding arrives with rebindable hotkeys.
+                pasteLast = event.getIntegerValueField(.keyboardEventAutorepeat) == 0
+                return true
+            default:
+                return false
+            }
         }
         if let action {
             let onAction = onAction
             DispatchQueue.main.async { onAction(action) }
         }
+        if pasteLast { DispatchQueue.main.async(execute: onPasteLast) }
         return swallow ? nil : Unmanaged.passUnretained(event)
     }
 }

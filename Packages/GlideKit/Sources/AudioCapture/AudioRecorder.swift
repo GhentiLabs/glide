@@ -19,11 +19,26 @@ public final class AudioRecorder: @unchecked Sendable {
     /// Without this the microphone delivers silence rather than an error.
     public static var isAuthorized: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
 
-    public static var deviceName: String { AVCaptureDevice.default(for: .audio)?.localizedName ?? "none" }
+    /// The microphone to record from, by Core Audio UID; nil follows the system default.
+    public var microphoneID: String?
+
+    public var deviceName: String {
+        (microphoneID.flatMap { AVCaptureDevice(uniqueID: $0) } ?? AVCaptureDevice.default(for: .audio))?.localizedName ?? "none"
+    }
+
+    public static var microphones: [Microphone] {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified)
+            .devices.map { Microphone(id: $0.uniqueID, name: $0.localizedName) }
+    }
 
     public func start() throws {
         lock.withLock { samples.removeAll(keepingCapacity: true) }
         let input = engine.inputNode
+        if let microphoneID, var device = Self.deviceID(forUID: microphoneID), let unit = input.audioUnit {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device,
+                UInt32(MemoryLayout<AudioDeviceID>.size))
+        }
         let inFormat = input.outputFormat(forBus: 0)
         let outFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32, sampleRate: Self.sampleRate, channels: 1, interleaved: false)!
@@ -47,6 +62,20 @@ public final class AudioRecorder: @unchecked Sendable {
         return lock.withLock { samples }
     }
 
+    private static func deviceID(forUID uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice, mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var cfUID = uid as CFString
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafePointer(to: &cfUID) { pointer in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &address, UInt32(MemoryLayout<CFString>.size), pointer, &size, &device)
+        }
+        return status == noErr && device != kAudioObjectUnknown ? device : nil
+    }
+
     func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outFormat: AVAudioFormat) {
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * outFormat.sampleRate / buffer.format.sampleRate) + 1
         guard let out = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: capacity) else { return }
@@ -67,4 +96,10 @@ public final class AudioRecorder: @unchecked Sendable {
             onLevel((chunk.reduce(0) { $0 + $1 * $1 } / Float(chunk.count)).squareRoot())
         }
     }
+}
+
+public struct Microphone: Identifiable, Hashable, Sendable {
+    /// Core Audio device UID.
+    public let id: String
+    public let name: String
 }
