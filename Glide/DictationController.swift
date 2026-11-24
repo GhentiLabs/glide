@@ -68,6 +68,13 @@ final class DictationController {
         switch action {
         case .start:
             guard modelReady else { return show(.initializing) }
+            guard AudioRecorder.isAuthorized else {
+                log.error("microphone not authorized")
+                status = "Allow Glide to use the microphone"
+                Task { _ = await AudioRecorder.requestPermission() }
+                return show(.error(.microphoneDenied))
+            }
+            log.notice("recording from \(AudioRecorder.deviceName, privacy: .public)")
             do {
                 try recorder.start()
                 recording = true
@@ -92,14 +99,24 @@ final class DictationController {
     }
 
     private func finish(_ samples: [Float], released: ContinuousClock.Instant) async {
+        let peak = samples.lazy.map(abs).max() ?? 0
+        log.notice("captured \(samples.count / 16) ms, peak \(peak)")
+        // A muted or denied microphone records exact silence rather than failing.
+        guard peak > 0.0005 else {
+            log.error("microphone delivered silence")
+            return show(.error(.microphoneDenied))
+        }
         show(.transcribing)
         do {
             let text = try await recognizer.transcribe(samples, context: RecognitionContext())
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return show(.error(.nothingHeard)) }
+            guard !text.isEmpty else {
+                log.notice("recognizer returned no text")
+                return show(.error(.nothingHeard))
+            }
             await Inserter.paste(text)
             let ms = (ContinuousClock.now - released) / .milliseconds(1)
-            log.info("release to paste: \(Int(ms)) ms for \(samples.count / 16) ms of audio")
+            log.notice("release to paste: \(Int(ms)) ms for \(samples.count / 16) ms of audio")
             show(.completed)
         } catch {
             log.error("recognition failed: \(error.localizedDescription, privacy: .public)")
@@ -112,7 +129,7 @@ final class DictationController {
         switch state {
         case .completed, .error, .initializing:
             Task {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(state == .completed ? 1 : 2))
                 if bar.state == state { bar.state = .idle }
             }
         default:

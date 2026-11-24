@@ -26,5 +26,7 @@ let package = Package(
         .executableTarget(name: "GlideBench", dependencies: ["GlideCore", "Recognizer", .product(name: "FluidAudio", package: "FluidAudio")]),
         .testTarget(name: "GlideCoreTests", dependencies: ["GlideCore"]),
         .testTarget(name: "HotkeyEngineTests", dependencies: ["HotkeyEngine"]),
+        .testTarget(name: "AudioCaptureTests", dependencies: ["AudioCapture"]),
+        .testTarget(name: "OverlayTests", dependencies: ["Overlay"]),
     ]
 )

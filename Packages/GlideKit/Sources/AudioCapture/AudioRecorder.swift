@@ -16,6 +16,11 @@ public final class AudioRecorder: @unchecked Sendable {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
+    /// Without this the microphone delivers silence rather than an error.
+    public static var isAuthorized: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
+
+    public static var deviceName: String { AVCaptureDevice.default(for: .audio)?.localizedName ?? "none" }
+
     public func start() throws {
         lock.withLock { samples.removeAll(keepingCapacity: true) }
         let input = engine.inputNode
@@ -42,7 +47,7 @@ public final class AudioRecorder: @unchecked Sendable {
         return lock.withLock { samples }
     }
 
-    private func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outFormat: AVAudioFormat) {
+    func consume(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outFormat: AVAudioFormat) {
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * outFormat.sampleRate / buffer.format.sampleRate) + 1
         guard let out = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: capacity) else { return }
         nonisolated(unsafe) var fed = false  // the input block runs synchronously inside convert
