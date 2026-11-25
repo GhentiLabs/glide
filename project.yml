@@ -42,6 +42,10 @@ targets:
         product: Store
       - package: GlideKit
         product: FieldContext
+      - package: GlideKit
+        product: EditTracker
+      - package: GlideKit
+        product: Learning
     info:
       path: Glide/Info.plist
       properties:

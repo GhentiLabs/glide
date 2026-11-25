@@ -15,6 +15,14 @@ public struct DictationRecord: Identifiable, Codable, Sendable, Equatable {
     public var diff: [EditSpan]
     public var verdict: Verdict
     public var skipReason: SkipReason?
+    /// Where `finalText` came from. An edit in Glide's history outranks one read from the field.
+    public var finalSource: FinalSource?
+    /// How the field was read, for the per-app tracking report.
+    public var fieldKind: FieldKind?
+    /// The labeller version that produced `diff`, so labels can be rebuilt.
+    public var labellerVersion: Int?
+    /// The user marked this as not a correction; it never trains anything.
+    public var excluded: Bool?
 
     public init(
         id: UUID = UUID(), time: Date = .now, app: String?, rawTranscript: String, refinedText: String,
@@ -34,7 +42,11 @@ public struct DictationRecord: Identifiable, Codable, Sendable, Equatable {
 
 /// One changed run of words between the pasted text and the final text.
 public struct EditSpan: Codable, Sendable, Equatable {
-    public enum Kind: String, Codable, Sendable { case misheard, formatting, cleanup, rewrite, addition }
+    public enum Kind: String, Codable, Sendable {
+        /// The user put back words the rules or refiner changed.
+        case restored
+        case formatting, cleanup, misheard, rewrite, addition
+    }
 
     /// Word range in the pasted text; empty for a pure insertion.
     public var pastedWords: Range<Int>
@@ -69,4 +81,10 @@ public enum SkipReason: String, Codable, Sendable {
     case pastedTextNotFound
     case focusLost
     case replacedByNewDictation
+    /// Learning from edits is off, so nothing after the paste was read.
+    case learningOff
 }
+
+public enum FinalSource: String, Codable, Sendable { case field, history }
+
+public enum FieldKind: String, Codable, Sendable { case native, web, terminal }

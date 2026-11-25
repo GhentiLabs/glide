@@ -10,6 +10,7 @@ struct SettingsView: View {
             GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
             HotkeySettings().tabItem { Label("Hotkeys", systemImage: "keyboard") }
             AudioSettings().tabItem { Label("Audio", systemImage: "mic") }
+            LearningSettings().tabItem { Label("Learning", systemImage: "sparkles") }
             ModelSettings().tabItem { Label("Model", systemImage: "cpu") }
             PrivacySettings().tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
@@ -75,23 +76,53 @@ private struct AudioSettings: View {
     }
 }
 
+private struct LearningSettings: View {
+    @Environment(AppModel.self) private var app
+    @AppStorage("learnFromEdits") private var learn = true
+    @State private var confirming = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $learn) {
+                    Text("Learn from my edits")
+                    Text("After Glide types, it reads the field until you move on, to see what you fix.")
+                }
+            } footer: {
+                Text("Only the text Glide typed is kept. Password fields are never read.").foregroundStyle(.secondary)
+            }
+            LabeledContent("Words learned", value: "\(app.store.dictionary.count)")
+            Button("Delete Learning Data…", role: .destructive) { confirming = true }
+                .confirmationDialog("Delete what Glide has learned?", isPresented: $confirming) {
+                    Button("Delete Learning Data", role: .destructive) { app.store.clearLearningData() }
+                } message: {
+                    Text("Every word and every correction label goes. Your history text stays.")
+                }
+        }
+    }
+}
+
 private struct ModelSettings: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
         Form {
-            LabeledContent("Speech model", value: "Parakeet TDT 0.6B v3")
-            LabeledContent("Status") {
-                if app.modelFailed {
-                    Text("Failed to load")
-                } else if let progress = app.modelProgress {
-                    ProgressView(value: progress).frame(width: 160)
-                } else {
-                    Text("Ready")
+            Section {
+                LabeledContent("Speech model", value: SpeechRecognizer.modelName)
+                LabeledContent("Status") {
+                    if app.modelFailed {
+                        Text("Failed to load")
+                    } else if let progress = app.modelProgress {
+                        ProgressView(value: progress).frame(width: 160)
+                    } else {
+                        Text("Ready")
+                    }
                 }
+                LabeledContent("Runs on", value: "This Mac")
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([SpeechRecognizer.modelDirectory]) }
+            } footer: {
+                Text(SpeechRecognizer.attribution + " CC BY 4.0.").foregroundStyle(.secondary)
             }
-            LabeledContent("Runs on", value: "This Mac")
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([ParakeetRecognizer.modelDirectory]) }
         }
     }
 }
@@ -103,7 +134,7 @@ private struct PrivacySettings: View {
     var body: some View {
         Form {
             Section {
-                Text("Your audio, history and dictionary stay on this Mac. Glide goes online only to download the speech model.")
+                Text("Your audio, history and learned words stay on this Mac. Glide goes online only to download its speech models.")
             }
             LabeledContent("History", value: "\(app.store.records.count) dictations")
             Button("Clear History…", role: .destructive) { confirming = true }
@@ -111,7 +142,7 @@ private struct PrivacySettings: View {
                 .confirmationDialog("Clear all of your dictation history?", isPresented: $confirming) {
                     Button("Clear History", role: .destructive) { app.store.clearHistory() }
                 } message: {
-                    Text("This can't be undone. Your dictionary is kept.")
+                    Text("This can't be undone. Learned words are kept.")
                 }
         }
     }

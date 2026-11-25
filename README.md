@@ -12,4 +12,4 @@ cd Packages/GlideKit && swift test          # module tests
 ./scripts/release.sh                        # signed DMG in build/; set NOTARY_PROFILE to notarize
 ```
 
-`swift run -c release glide-bench <folder>` (in `Packages/GlideKit`) scores Parakeet on a folder of clips, each with a same-named `.txt` reference.
+`swift run -c release glide-bench <folder>` (in `Packages/GlideKit`) scores the speech model on a folder of clips, each with a same-named `.txt` reference.

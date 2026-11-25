@@ -31,7 +31,7 @@ Dictation that learns you, on your Mac. Corrections update a personal dictionary
 
 - A small bar floats at a screen edge at all times and becomes a live waveform while recording. It must never take keyboard focus from the app being typed in.
 - A main window holds history, the dictionary and what Glide has learned. Settings is a separate standard window. An account control sits bottom left of the sidebar; it has nothing behind it in v2.0.
-- First run needs Microphone and Accessibility permission and a roughly 450 MB model download.
+- First run needs Microphone and Accessibility permission and a roughly 650 MB model download.
 
 ## Capabilities and Constraints
 
@@ -39,7 +39,7 @@ Dictation that learns you, on your Mac. Corrections update a personal dictionary
 - Reads the focused text field through Accessibility for context; never reads or dictates into password fields.
 - Inserts by simulated paste and restores the clipboard.
 - Watches the field after insertion and stores the whole word-level diff of every edit, however large (confirmed). Each changed span is labelled on its own; only misheard spans train the recognizer.
-- Recognizer: Parakeet TDT 0.6B v3 on Core ML for v2.0 (confirmed). Learning: dictionary and decode-time biasing first, nightly LoRA adapter with a regression gate later, a small edit model after that.
+- Recognizer: Fluid Speech Pro (a Parakeet TDT 0.6B v3 post-train by FluidVoice) on Core ML (confirmed 2026-11-25; replaced stock Parakeet v3). Learning: dictionary and decode-time biasing first, nightly LoRA adapter with a regression gate later, a small edit model after that.
 - Cached audio is sensitive: encrypted at rest, retention-capped, with a clear-all control.
 - Source specs: "Voice Dictation Overlay: Clean-Room Functional Spec" and "Self-improving local dictation: STT models and on-device personalization".
 - Undecided: minimum macOS version; whether cloud recognizers return as an option; whether command mode ships before the edit model.

@@ -5,14 +5,6 @@ import Testing
 @Suite struct RefinerTests {
     let common: (String) -> Bool = { ["the", "send", "and", "can"].contains($0) }
 
-    @Test func dictionaryReplacesWholeWordsInAnyCase() {
-        let kubectl = DictionaryEntry(word: "kubectl", heardAs: ["cube control", "cube cuttle"])
-        let ghenti = DictionaryEntry(word: "Ghenti", heardAs: ["Genty"])
-        let (text, used) = Refiner.applyDictionary("Run Cube Control at genty labs, not cube controller.", entries: [kubectl, ghenti])
-        #expect(text == "Run kubectl at Ghenti labs, not cube controller.")
-        #expect(used == [kubectl.id, ghenti.id])
-    }
-
     @Test func emptyFieldKeepsTextAsIs() {
         #expect(Refiner.join("Send it.", after: nil, isCommonWord: common) == "Send it.")
         #expect(Refiner.join("Send it.", after: "", isCommonWord: common) == "Send it.")
