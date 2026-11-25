@@ -3,7 +3,7 @@ import GlideCore
 import SwiftUI
 
 struct MainWindow: View {
-    enum Section: Hashable { case home, dictionary }
+    enum Section: Hashable { case home, learned }
 
     @State private var section: Section = .home
 
@@ -11,14 +11,14 @@ struct MainWindow: View {
         NavigationSplitView {
             List(selection: $section) {
                 Label("Home", systemImage: "house").tag(Section.home)
-                Label("Dictionary", systemImage: "book.closed").tag(Section.dictionary)
+                Label("Learned", systemImage: "sparkles").tag(Section.learned)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210)
             .safeAreaInset(edge: .bottom) { PrivacyCard() }
         } detail: {
             switch section {
             case .home: HomeView()
-            case .dictionary: DictionaryView()
+            case .learned: LearnedView()
             }
         }
         .frame(minWidth: 760, minHeight: 520)
@@ -273,9 +273,12 @@ private struct HistoryRow: View {
                 editor
             } else {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(text).textSelection(.enabled)
-                    // A score marking, as on the design page.
-                    if record.finalText != nil { Text("edited").font(.system(.caption, design: .serif)).italic().foregroundStyle(.secondary) }
+                    Text(EditMarks.text(for: record)).textSelection(.enabled)
+                    // A score marking, as on the design page: how the edit was used.
+                    if record.finalText != nil {
+                        Text(record.diff.isEmpty ? "edited" : EditMarks.summary(for: record))
+                            .font(.system(.caption, design: .serif)).italic().foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 10) {
@@ -317,7 +320,7 @@ private struct HistoryRow: View {
     }
 
     private func save() {
-        if let draft { model.store.correct(record.id, to: draft) }
+        if let draft { model.correct(record.id, to: draft) }
         draft = nil
     }
 
@@ -328,87 +331,6 @@ private struct HistoryRow: View {
         Task {
             try? await Task.sleep(for: .seconds(1.2))
             copied = false
-        }
-    }
-}
-
-struct DictionaryView: View {
-    @Environment(AppModel.self) private var app
-    @State private var selection = Set<UUID>()
-    @State private var editing: DictionaryEntry?
-    @State private var query = ""
-
-    private var entries: [DictionaryEntry] {
-        let all = app.store.dictionary.sorted { $0.word.localizedCaseInsensitiveCompare($1.word) == .orderedAscending }
-        return query.isEmpty ? all : all.filter {
-            $0.word.localizedCaseInsensitiveContains(query) || $0.heardAs.contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
-
-    var body: some View {
-        Table(entries, selection: $selection) {
-            TableColumn("Word", value: \.word)
-            TableColumn("Heard as") { Text($0.heardAs.joined(separator: ", ")).foregroundStyle(.secondary) }
-            TableColumn("From") { Text($0.source == .user ? "Added by you" : "Learned").foregroundStyle(.secondary) }
-                .width(min: 90, ideal: 110)
-            TableColumn("Used") { Text("\($0.uses)").monospacedDigit() }.width(min: 40, ideal: 50)
-        }
-        .contextMenu(forSelectionType: UUID.self) { ids in
-            Button("Edit…") { editing = app.store.dictionary.first { $0.id == ids.first } }.disabled(ids.count != 1)
-            Button("Delete", role: .destructive) { app.store.remove(entries: ids) }
-        } primaryAction: { ids in
-            editing = app.store.dictionary.first { $0.id == ids.first }
-        }
-        .onDeleteCommand { app.store.remove(entries: selection) }
-        .overlay {
-            if app.store.dictionary.isEmpty {
-                ContentUnavailableView {
-                    Label("No words yet", systemImage: "book.closed")
-                } description: {
-                    Text("Add names and terms Glide should spell your way.")
-                } actions: {
-                    Button("Add Word") { editing = DictionaryEntry(word: "") }
-                }
-            }
-        }
-        .searchable(text: $query, placement: .toolbar)
-        .toolbar {
-            Button("Add Word", systemImage: "plus") { editing = DictionaryEntry(word: "") }
-        }
-        .sheet(item: $editing) { entry in
-            EntryEditor(entry: entry) { app.store.upsert($0) }
-        }
-        .navigationTitle("Dictionary")
-    }
-}
-
-private struct EntryEditor: View {
-    @State var entry: DictionaryEntry
-    let save: (DictionaryEntry) -> Void
-    @State private var heardAs = ""
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Form {
-            TextField("Word", text: $entry.word, prompt: Text("kubectl"))
-            TextField("Heard as", text: $heardAs, prompt: Text("cube control, cube cuttle"))
-            Text("Separate each way Glide mishears it with a comma. Glide replaces them with the word.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .formStyle(.grouped)
-        .frame(width: 400)
-        .onAppear { heardAs = entry.heardAs.joined(separator: ", ") }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    entry.word = entry.word.trimmingCharacters(in: .whitespaces)
-                    entry.heardAs = heardAs.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                    save(entry)
-                    dismiss()
-                }
-                .disabled(entry.word.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
         }
     }
 }

@@ -9,13 +9,10 @@ public protocol Recognizer: Sendable {
 }
 
 public struct RecognitionContext: Sendable {
-    /// Words to favour during decoding (dictionary entries).
-    public var biasWords: [String]
     /// Text just before the cursor, if the field could be read.
     public var precedingText: String?
 
-    public init(biasWords: [String] = [], precedingText: String? = nil) {
-        self.biasWords = biasWords
+    public init(precedingText: String? = nil) {
         self.precedingText = precedingText
     }
 }
