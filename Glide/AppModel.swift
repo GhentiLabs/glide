@@ -287,7 +287,9 @@ final class AppModel {
         log.notice("release to paste: \(Int((ContinuousClock.now - released) / .milliseconds(1))) ms for \(samples.count / 16) ms of audio")
         show(.completed)
         offerHandsFreeTip()
-        if !(await Inserter.paste(text)) { await insertUnread(text, into: field) }
+        let before = field.value == nil ? nil : await Task.detached { FieldContext.currentValue() }.value
+        let read = await Inserter.paste(text)
+        await confirmPaste(text, before: before, read: read)
         track(record.id, pasted: text)
     }
 
@@ -382,14 +384,19 @@ final class AppModel {
         }
     }
 
-    /// No app read the paste. If the field is readable and unchanged, write through Accessibility instead.
-    /// Only after the read timed out, so the two paths never both land.
-    private func insertUnread(_ text: String, into field: FieldSnapshot) async {
-        guard let before = field.value else { return }
-        let unchanged = await Task.detached { FieldContext.currentValue() == before }.value
-        guard unchanged else { return }
+    /// A paste that landed changes the field. If a readable field is still unchanged a second later, the paste was lost
+    /// (the app read the clipboard but inserted nothing, or never read it), so the text goes in through Accessibility.
+    private func confirmPaste(_ text: String, before: String?, read: Bool) async {
+        guard let before else { return log.notice("paste \(read ? "read" : "never read", privacy: .public); field unreadable, not confirmed") }
+        let started = ContinuousClock.now
+        while ContinuousClock.now - started < .seconds(1) {
+            if await Task.detached(operation: { FieldContext.currentValue() }).value != before {
+                return log.notice("paste landed after \(Int((ContinuousClock.now - started) / .milliseconds(1))) ms")
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         let inserted = await Task.detached { FieldContext.insert(text) }.value
-        log.notice("paste was never read; accessibility insert \(inserted ? "worked" : "failed", privacy: .public)")
+        log.notice("paste \(read ? "was read but" : "was never read and", privacy: .public) didn't land; accessibility insert \(inserted ? "worked" : "failed", privacy: .public)")
     }
 
     private func pasteLast() {

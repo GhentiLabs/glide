@@ -9,6 +9,8 @@ public enum Inserter {
     private static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
     /// How long the front app gets to read the paste before the clipboard is restored anyway.
     static let readTimeout = Duration.seconds(1)
+    /// How long the dictation stays on the clipboard after the first read, for apps that read it more than once per paste.
+    static let readGrace = Duration.milliseconds(300)
 
     /// Pastes `text` and returns once the front app has read it (true) or `readTimeout` passed (false).
     /// The user's clipboard is restored after either.
@@ -34,6 +36,7 @@ public enum Inserter {
         while !provider.read, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(20))
         }
+        if provider.read { try? await Task.sleep(for: readGrace) }
         // Something else wrote to the clipboard meanwhile; theirs wins.
         if board.changeCount == ours {
             board.clearContents()
