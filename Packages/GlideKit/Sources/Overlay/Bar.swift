@@ -778,9 +778,8 @@ public struct BarPreview: View {
 
     public var body: some View {
         // Drawn as an overlay: placed directly in a stack, the bar gives up its space.
-        // A strip of "screen" behind it, so the dark bar shows in Dark Mode too.
-        UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(.quaternary.opacity(0.7))
-            .frame(width: 240, height: 48)
+        // Sits on the bottom edge of whatever stands in for the screen.
+        Color.clear.frame(width: 240, height: 40)
             .overlay(alignment: .bottom) { BarView(model: model, anchor: .bottom, onDrag: {}, onDrop: {}).frame(width: 240, height: 52).clipped() }
             .accessibilityLabel("The Glide bar")
     }
