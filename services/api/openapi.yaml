@@ -1,0 +1,241 @@
+openapi: 3.1.0
+info:
+  title: Glide API
+  version: 1.0.0
+  description: |
+    Sync and training uploads for the Glide Mac app, at glide.ghenti.com.
+
+    Sign-in. Glide is a public native client of auth.ghenti.com ("glide"). It runs OAuth 2.1 with PKCE
+    (S256) through ASWebAuthenticationSession with an https callback, https://glide.ghenti.com/auth/callback,
+    which only an app listed in this host's apple-app-site-association can receive. It asks for
+    `resource=https://glide.ghenti.com/v1`, so its access token is an ES256 JWT with that audience.
+    This API verifies it against https://auth.ghenti.com/jwks (issuer https://auth.ghenti.com/api/auth);
+    `sub` is the Ghenti user ID.
+
+    Sync is end-to-end encrypted. The app gets its key from the account vault
+    (https://auth.ghenti.com/vault?client_id=glide&state=…, handed back to
+    https://glide.ghenti.com/keys/callback#key=…&kid=…&sub=…&state=…). Records and audio arrive sealed;
+    this API checks only their shape and size and never sees plaintext.
+      key_records = HKDF-SHA256(ikm: appKey, salt: empty, info: "glide/v1/records"), 32 bytes
+      key_audio   = HKDF-SHA256(ikm: appKey, salt: empty, info: "glide/v1/audio"), 32 bytes
+      sealed      = 0x01 | nonce (12) | AES-256-GCM ciphertext | tag (16)
+      AAD         = "glide/v1|record|<sub>|<id>|<kid>" or "glide/v1|audio|<sub>|<id>|<kid>"
+    A record's plaintext is the app's DictationRecord as JSON (text, edits, labels; no audio).
+    Audio plaintext is the dictation's recording as Opus in a CAF container.
+
+    Training is opt-in and readable by Ghenti. Each item is sealed with a fresh 32-byte key, and that key is
+    encrypted with RSA-OAEP-SHA-256 to the public half of the OpenBao transit key `glide-training`. Only the
+    training job's identity may call transit decrypt. This API stores items without being able to read them.
+      sealed      = 0x01 | nonce (12) | AES-256-GCM ciphertext | tag (16), AAD "glide/v1|training|<sub>|<id>"
+      plaintext   = JSON { "record": DictationRecord, "audio": base64 Opus/CAF or null }
+servers:
+  - url: https://glide.ghenti.com/v1
+security:
+  - bearer: []
+paths:
+  /account:
+    get:
+      operationId: getAccount
+      description: What the server holds for this user. `keyKid` is the highest key generation seen in uploads; an
+        app holding a lower one re-runs the vault unlock.
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keyKid, records, audioBytes, training]
+                properties:
+                  keyKid: { type: integer, minimum: 0 }
+                  records: { type: integer }
+                  audioBytes: { type: integer, format: int64 }
+                  training: { $ref: "#/components/schemas/Consent" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /records:
+    get:
+      operationId: listRecords
+      description: Changes after a cursor, oldest first. Start with after=0; page until `next` is null.
+      parameters:
+        - { name: after, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 200 } }
+      responses:
+        "200":
+          description: A page of records, tombstones included
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Record" } }
+                  next: { type: [integer, "null"], format: int64 }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAllSynced
+      description: Turning sync off with "Delete from Ghenti". Removes every record and audio file for this user.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+  /records/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: putRecord
+      description: Create or replace. `baseRevision` is the revision the app last saw, 0 for a new record. A stale
+        one gets 409 with the current record, which the app merges and sends again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kid, sealed, baseRevision]
+              properties:
+                kid: { type: integer, minimum: 1 }
+                sealed: { type: string, contentEncoding: base64, description: "At most 256 KiB decoded" }
+                baseRevision: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Record" }
+        "409":
+          description: Stale baseRevision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Record" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteRecord
+      description: Leaves a tombstone so other devices remove it too, and deletes the record's audio.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+  /audio/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid, description: The record's id } }
+    put:
+      operationId: putAudio
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary, description: "Sealed bytes, at most 8 MiB" }
+      responses:
+        "204": { description: Stored }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: getAudio
+      responses:
+        "200":
+          description: Sealed bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: "#/components/responses/Error" }
+
+  /training/key:
+    get:
+      operationId: getTrainingKey
+      description: The current public key items are encrypted to, from OpenBao transit `glide-training`.
+      responses:
+        "200":
+          description: RSA-4096 public key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, publicKeyPem]
+                properties:
+                  version: { type: integer, minimum: 1 }
+                  publicKeyPem: { type: string }
+        default: { $ref: "#/components/responses/Error" }
+
+  /training/consent:
+    put:
+      operationId: setTrainingConsent
+      description: Turning sharing off deletes every item this user shared.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Current consent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Consent" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /training/items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid, description: The record's id } }
+    put:
+      operationId: putTrainingItem
+      description: Refused with 403 unless consent is on. Sending the same id again replaces the item (a later edit).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keyVersion, wrappedKey, sealed]
+              properties:
+                keyVersion: { type: integer, minimum: 1 }
+                wrappedKey: { type: string, contentEncoding: base64, description: RSA-OAEP-SHA-256 of the item key }
+                sealed: { type: string, contentEncoding: base64, description: "At most 8 MiB decoded" }
+      responses:
+        "204": { description: Stored }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteTrainingItem
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Record:
+      type: object
+      required: [id, kid, revision, seq, deleted, sealed, hasAudio]
+      properties:
+        id: { type: string, format: uuid }
+        kid: { type: integer }
+        revision: { type: integer, minimum: 1 }
+        seq: { type: integer, format: int64, description: Server order; the cursor for listRecords }
+        deleted: { type: boolean }
+        sealed: { type: [string, "null"], contentEncoding: base64, description: Null for tombstones }
+        hasAudio: { type: boolean }
+    Consent:
+      type: object
+      required: [enabled, items]
+      properties:
+        enabled: { type: boolean }
+        since: { type: [string, "null"], format: date-time }
+        items: { type: integer }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string, description: "Machine code: unauthorized, forbidden, not_found, conflict, too_large, bad_request, rate_limited" }
+              message: { type: string }
