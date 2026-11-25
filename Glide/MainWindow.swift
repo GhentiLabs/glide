@@ -3,7 +3,7 @@ import GlideCore
 import SwiftUI
 
 struct MainWindow: View {
-    enum Section: Hashable { case home, dictionary }
+    enum Section: Hashable { case home, learned }
 
     @State private var section: Section = .home
 
@@ -11,55 +11,37 @@ struct MainWindow: View {
         NavigationSplitView {
             List(selection: $section) {
                 Label("Home", systemImage: "house").tag(Section.home)
-                Label("Dictionary", systemImage: "book.closed").tag(Section.dictionary)
+                Label("Learned", systemImage: "sparkles").tag(Section.learned)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210)
-            .safeAreaInset(edge: .bottom) { AccountButton() }
+            .safeAreaInset(edge: .bottom) { PrivacyCard() }
         } detail: {
             switch section {
             case .home: HomeView()
-            case .dictionary: DictionaryView()
+            case .learned: LearnedView()
             }
         }
-        .frame(minWidth: 720, minHeight: 460)
+        .frame(minWidth: 760, minHeight: 520)
         .tint(Tokens.tint)
     }
 }
 
-/// Bottom left of the sidebar. Accounts don't exist yet; the popover says so.
-private struct AccountButton: View {
+/// Bottom left of the sidebar, where an account will go. Until then it says where your data lives.
+private struct PrivacyCard: View {
     @Environment(AppModel.self) private var app
-    @State private var showing = false
 
     var body: some View {
-        Button { showing.toggle() } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "person.crop.circle.fill").font(.system(size: 24)).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Local profile").font(.callout.weight(.medium))
-                    Text("On this Mac").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            Image(systemName: "lock.laptopcomputer").font(.system(size: 17)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("On this Mac").font(.callout.weight(.medium))
+                Text("Nothing is uploaded").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            Button("Settings", systemImage: "gearshape") { app.open("settings") }
+                .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .padding(8)
-        .popover(isPresented: $showing, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Accounts aren't available yet").font(.headline)
-                Text("Glide keeps your history and dictionary on this Mac.").foregroundStyle(.secondary)
-                Button("Open Settings") {
-                    showing = false
-                    app.open("settings")
-                }
-                .padding(.top, 4)
-            }
-            .padding(16)
-            .frame(width: 270, alignment: .leading)
-        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 }
 
@@ -82,23 +64,44 @@ struct HomeView: View {
 
     var body: some View {
         let groups = groups
-        List {
-            ForEach(groups, id: \.day) { group in
-                Section(Self.title(for: group.day)) {
-                    ForEach(group.records) { HistoryRow(record: $0) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                Headline()
+                if !app.store.records.isEmpty { Stats(records: app.store.records) }
+                GettingStarted()
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("History").font(.title3.weight(.semibold))
+                        Spacer()
+                        SearchPill(query: $query)
+                    }
+                    if app.store.records.isEmpty {
+                        ContentUnavailableView(
+                            "No dictations yet", systemImage: "waveform",
+                            description: Text("Hold fn in any app and speak. What you say shows up here."))
+                            .frame(maxWidth: .infinity).card()
+                    } else if groups.isEmpty {
+                        ContentUnavailableView.search(text: query).frame(maxWidth: .infinity).card()
+                    }
+                    ForEach(groups, id: \.day) { group in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(Self.title(for: group.day)).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                            VStack(spacing: 0) {
+                                ForEach(group.records) { record in
+                                    HistoryRow(record: record)
+                                    if record.id != group.records.last?.id { Divider().padding(.leading, 92) }
+                                }
+                            }
+                            .card(padding: 6)
+                        }
+                    }
                 }
             }
+            .padding(28)
+            .frame(maxWidth: Tokens.contentWidth)
+            .frame(maxWidth: .infinity)
         }
-        .overlay {
-            if app.store.records.isEmpty {
-                ContentUnavailableView(
-                    "No dictations yet", systemImage: "waveform",
-                    description: Text("Hold fn in any app and speak. What you say shows up here."))
-            } else if groups.isEmpty {
-                ContentUnavailableView.search(text: query)
-            }
-        }
-        .searchable(text: $query, placement: .toolbar)
+        .background(Tokens.canvas)
         .navigationTitle("Home")
     }
 
@@ -110,125 +113,224 @@ struct HomeView: View {
     }
 }
 
+/// "Hold fn to dictate in Messages", or what stands in the way.
+private struct Headline: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if app.paused {
+                Text("Glide is paused")
+                Spacer()
+                Button("Resume") { app.paused = false }.buttonStyle(.borderedProminent)
+            } else if !app.hasAccessibility {
+                Text("Glide needs Accessibility")
+                Spacer()
+                Button("Open Settings", action: app.guideAccessibility).buttonStyle(.borderedProminent)
+            } else if let progress = app.modelProgress, !app.modelFailed {
+                Text("Getting ready")
+                ProgressView(value: progress).frame(width: 120)
+                Text("\(Int(progress * 100))%").monospacedDigit().foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                Text("Hold")
+                Keycap("fn", size: 20)
+                if let lastApp = app.lastApp, let name = lastApp.localizedName {
+                    Text("to dictate in")
+                    if let icon = lastApp.icon { Image(nsImage: icon).resizable().frame(width: 28, height: 28) }
+                    Text(name)
+                } else {
+                    Text("to dictate")
+                }
+                Spacer()
+            }
+        }
+        .font(.system(size: 24, weight: .semibold, design: .rounded))
+        .lineLimit(1)
+        .animation(Tokens.spring, value: app.lastApp)
+    }
+}
+
+private struct Stats: View {
+    let records: [DictationRecord]
+
+    var body: some View {
+        let words = records.reduce(0) { $0 + ($1.finalText ?? $1.refinedText).split(whereSeparator: \.isWhitespace).count }
+        // Typing at 40 words a minute against speaking at 150.
+        let minutesSaved = Int((Double(words) / 40 - Double(words) / 150).rounded())
+        let today = records.filter { Calendar.current.isDateInToday($0.time) }.count
+        HStack(spacing: 0) {
+            tile("Words dictated", value: words.formatted(), unit: "words")
+            tile("Time saved", value: minutesSaved >= 60 ? "\(minutesSaved / 60) hr \(minutesSaved % 60)" : "\(minutesSaved)", unit: "min")
+            tile("Today", value: today.formatted(), unit: today == 1 ? "dictation" : "dictations")
+        }
+        .card(padding: 18)
+    }
+
+    private func tile(_ title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value).font(.system(size: 26, weight: .semibold, design: .rounded)).monospacedDigit()
+                Text(unit).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A few first tasks that tick themselves off; the row leaves once they're all done.
+private struct GettingStarted: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let tasks: [(symbol: String, title: String, detail: String, done: Bool)] = [
+            ("mic", "Your first dictation", "Hold fn anywhere and speak.", !app.store.records.isEmpty),
+            ("hand.tap", "Go hands-free", "Double-tap fn, then tap it again to finish.", app.usedHandsFree),
+            ("clipboard", "Paste the last one", "Press ⌃⌘V to paste your last dictation again.", app.usedPasteLast),
+        ]
+        if tasks.contains(where: { !$0.done }) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Getting started").font(.title3.weight(.semibold))
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(tasks, id: \.title) { task in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: task.symbol).foregroundStyle(task.done ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Tokens.tint))
+                                Spacer()
+                                Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.done ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.tertiary))
+                            }
+                            .font(.title3)
+                            .frame(height: 24)
+                            Group {
+                                Text(task.title).font(.headline)
+                                Text(task.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                            .opacity(task.done ? 0.55 : 1)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .card(padding: 16)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue(task.done ? "Done" : "Not done")
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .transition(.opacity)
+        }
+    }
+}
+
+private struct SearchPill: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search", text: $query).textFieldStyle(.plain)
+            if !query.isEmpty {
+                Button("Clear", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(width: 220)
+        .background(Capsule().fill(.quaternary.opacity(0.6)))
+    }
+}
+
 private struct HistoryRow: View {
     let record: DictationRecord
+    @Environment(AppModel.self) private var model
     @State private var hovering = false
     @State private var copied = false
+    /// The text being edited; nil when the row is just showing.
+    @State private var draft: String?
+    @FocusState private var editing: Bool
 
     private var text: String { record.finalText ?? record.refinedText }
 
-    private var appName: String? {
+    private var app: (name: String, icon: NSImage)? {
         guard let id = record.app, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
-        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        return (FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: ""), NSWorkspace.shared.icon(forFile: url.path))
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(record.time, format: .dateTime.hour().minute())
-                .monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(text).textSelection(.enabled)
-                if let appName { Text(appName).font(.caption).foregroundStyle(.secondary) }
-            }
-            Spacer(minLength: 8)
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                copied = true
-                Task {
-                    try? await Task.sleep(for: .seconds(1.2))
-                    copied = false
+                .monospacedDigit().foregroundStyle(.secondary).fixedSize().frame(width: 64, alignment: .leading)
+            Group {
+                if let app {
+                    Image(nsImage: app.icon).resizable().frame(width: 16, height: 16).help(app.name).accessibilityLabel(app.name)
+                } else {
+                    Color.clear.frame(width: 16, height: 16)
                 }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.borderless)
-            .help("Copy")
-            .accessibilityLabel("Copy")
-            .opacity(hovering || copied ? 1 : 0)
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
+            if draft != nil {
+                editor
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(EditMarks.text(for: record)).textSelection(.enabled)
+                    // A score marking, as on the design page: how the edit was used.
+                    if record.finalText != nil {
+                        Text(record.diff.isEmpty ? "edited" : EditMarks.summary(for: record))
+                            .font(.system(.caption, design: .serif)).italic().foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 10) {
+                    Button("Edit", systemImage: "pencil") {
+                        draft = text
+                        editing = true
+                    }
+                    .help("Edit this transcript")
+                    Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc", action: copy)
+                        .contentTransition(.symbolEffect(.replace))
+                        .help("Copy")
+                }
+                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .opacity(hovering || copied ? 1 : 0)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(.quaternary.opacity(hovering && draft == nil ? 0.35 : 0)))
         .onHover { hovering = $0 }
     }
-}
 
-struct DictionaryView: View {
-    @Environment(AppModel.self) private var app
-    @State private var selection = Set<UUID>()
-    @State private var editing: DictionaryEntry?
-    @State private var query = ""
-
-    private var entries: [DictionaryEntry] {
-        let all = app.store.dictionary.sorted { $0.word.localizedCaseInsensitiveCompare($1.word) == .orderedAscending }
-        return query.isEmpty ? all : all.filter {
-            $0.word.localizedCaseInsensitiveContains(query) || $0.heardAs.contains { $0.localizedCaseInsensitiveContains(query) }
+    /// Return saves, Escape cancels.
+    @ViewBuilder private var editor: some View {
+        TextField("Transcript", text: Binding(get: { draft ?? "" }, set: { draft = $0 }), axis: .vertical)
+            .textFieldStyle(.plain)
+            .focused($editing)
+            .onSubmit(save)
+            .onExitCommand { draft = nil }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Tokens.tint, lineWidth: 1.5))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 6) {
+            Button("Cancel") { draft = nil }
+            Button("Save", action: save).buttonStyle(.borderedProminent)
+                .disabled((draft ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        .controlSize(.small)
     }
 
-    var body: some View {
-        Table(entries, selection: $selection) {
-            TableColumn("Word", value: \.word)
-            TableColumn("Heard as") { Text($0.heardAs.joined(separator: ", ")).foregroundStyle(.secondary) }
-            TableColumn("From") { Text($0.source == .user ? "Added by you" : "Learned").foregroundStyle(.secondary) }
-                .width(min: 90, ideal: 110)
-            TableColumn("Used") { Text("\($0.uses)").monospacedDigit() }.width(min: 40, ideal: 50)
-        }
-        .contextMenu(forSelectionType: UUID.self) { ids in
-            Button("Edit…") { editing = app.store.dictionary.first { $0.id == ids.first } }.disabled(ids.count != 1)
-            Button("Delete", role: .destructive) { app.store.remove(entries: ids) }
-        } primaryAction: { ids in
-            editing = app.store.dictionary.first { $0.id == ids.first }
-        }
-        .onDeleteCommand { app.store.remove(entries: selection) }
-        .overlay {
-            if app.store.dictionary.isEmpty {
-                ContentUnavailableView {
-                    Label("No words yet", systemImage: "book.closed")
-                } description: {
-                    Text("Add names and terms Glide should spell your way.")
-                } actions: {
-                    Button("Add Word") { editing = DictionaryEntry(word: "") }
-                }
-            }
-        }
-        .searchable(text: $query, placement: .toolbar)
-        .toolbar {
-            Button("Add Word", systemImage: "plus") { editing = DictionaryEntry(word: "") }
-        }
-        .sheet(item: $editing) { entry in
-            EntryEditor(entry: entry) { app.store.upsert($0) }
-        }
-        .navigationTitle("Dictionary")
+    private func save() {
+        if let draft { model.correct(record.id, to: draft) }
+        draft = nil
     }
-}
 
-private struct EntryEditor: View {
-    @State var entry: DictionaryEntry
-    let save: (DictionaryEntry) -> Void
-    @State private var heardAs = ""
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Form {
-            TextField("Word", text: $entry.word, prompt: Text("kubectl"))
-            TextField("Heard as", text: $heardAs, prompt: Text("cube control, cube cuttle"))
-            Text("Separate each way Glide mishears it with a comma. Glide replaces them with the word.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .formStyle(.grouped)
-        .frame(width: 400)
-        .onAppear { heardAs = entry.heardAs.joined(separator: ", ") }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    entry.word = entry.word.trimmingCharacters(in: .whitespaces)
-                    entry.heardAs = heardAs.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                    save(entry)
-                    dismiss()
-                }
-                .disabled(entry.word.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            copied = false
         }
     }
 }

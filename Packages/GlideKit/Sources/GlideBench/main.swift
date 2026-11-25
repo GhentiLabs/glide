@@ -1,11 +1,32 @@
 import FluidAudio
 import Foundation
 import GlideCore
+import Learning
 import Recognizer
 
 // Usage: glide-bench <folder>
 // The folder holds clips (wav, m4a, ...) each with a same-named .txt reference transcript.
 // Prints WER per clip and overall, and recognition time.
+// GLIDE_VOCAB="word,word" boosts those words, to compare against a run without it.
+//
+// Usage: glide-bench labels <pairs.jsonl>
+// Each line is {"pasted": ..., "final": ..., "raw": optional}. Prints every labelled span, then counts per label,
+// for checking the labeller's precision by hand. Keep personal pairs on this Mac.
+
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "labels" {
+    struct Pair: Decodable { var raw: String?; var pasted: String; var final: String }
+    var counts: [EditSpan.Kind: Int] = [:]
+    let lines = try String(contentsOfFile: CommandLine.arguments[2], encoding: .utf8).split(separator: "\n")
+    for (n, line) in lines.enumerated() {
+        let pair = try JSONDecoder().decode(Pair.self, from: Data(line.utf8))
+        for span in Labeller.label(raw: pair.raw ?? pair.pasted, pasted: pair.pasted, final: pair.final) {
+            counts[span.kind, default: 0] += 1
+            print("\(n)\t\(span.kind.rawValue)\t\(span.before)\t→\t\(span.after)")
+        }
+    }
+    print(counts.sorted { $0.value > $1.value }.map { "\($0.key.rawValue) \($0.value)" }.joined(separator: ", "))
+    exit(0)
+}
 
 guard CommandLine.arguments.count == 2 else {
     print("usage: glide-bench <folder of clips with matching .txt references>")
@@ -21,8 +42,12 @@ guard !clips.isEmpty else {
     exit(1)
 }
 
-let recognizer = ParakeetRecognizer()
+// GLIDE_MODEL_DIR loads the model from another folder, such as a copy made outside the app.
+let recognizer = ProcessInfo.processInfo.environment["GLIDE_MODEL_DIR"].map { SpeechRecognizer(directory: URL(fileURLWithPath: $0)) } ?? SpeechRecognizer()
 try await recognizer.prepare { _ in }
+if let vocab = ProcessInfo.processInfo.environment["GLIDE_VOCAB"] {
+    try await recognizer.setVocabulary(vocab.split(separator: ",").map { DictionaryEntry(word: String($0)) })
+}
 let converter = AudioConverter()
 var errors = 0
 var words = 0

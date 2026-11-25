@@ -1,119 +1,221 @@
 import GlideCore
+import Overlay
 import SwiftUI
 
-/// First run: one full window, a progress line on top, four steps that each end in a check.
+/// First run: four steps in one fixed frame. Each shows one thing to try and moves on when it works.
 struct SetupWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            ProgressView(value: Double(step + 1), total: 4)
-                .progressViewStyle(.linear).tint(Tokens.tint)
-                .animation(Tokens.spring, value: step)
-            HStack {
-                if step > 0 {
-                    Button("Back", systemImage: "chevron.left") { step -= 1 }.buttonStyle(.borderless)
-                }
-                Spacer()
+        Group {
+            switch step {
+            case 0: PermissionsStep { step = 1 }
+            case 1: MicrophoneStep { step = 2 }
+            case 2: HotkeyStep { step = 3 }
+            default: TryStep {
+                UserDefaults.standard.set(true, forKey: "setupDone")
+                dismissWindow(id: "setup")
+                app.bar.show(Toast(
+                    .tip, symbol: "waveform", title: "Glide lives here",
+                    message: "Hold fn in any app to dictate. Drag the bar to move it.", keycap: "fn", duration: 9))
             }
-            .frame(height: 28)
-            .padding(.horizontal, 20).padding(.top, 12)
-            Group {
-                switch step {
-                case 0: PermissionsStep { step = 1 }
-                case 1: MicrophoneStep { step = 2 }
-                case 2: HotkeyStep { step = 3 }
-                default: TryStep {
-                    UserDefaults.standard.set(true, forKey: "setupDone")
-                    dismissWindow(id: "setup")
-                }
-                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.horizontal, 56).padding(.bottom, 40)
         }
-        .frame(width: 780, height: 580)
+        .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+        .id(step)
+        .animation(Tokens.spring, value: step)
+        .frame(width: 780, height: 500)
+        .background(Tokens.canvas)
         .tint(Tokens.tint)
+        .toolbar {
+            if step > 0 {
+                ToolbarItem(placement: .navigation) {
+                    Button("Back", systemImage: "chevron.left") { step -= 1 }
+                        .keyboardShortcut("[").help("Back")
+                }
+            }
+            ToolbarItem(placement: .principal) { StepDots(step: step, count: 4) }
+                .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 6) {
+                    CaretMark(caret: Tokens.tintGraphic).frame(width: 15, height: 15)
+                    Text("Glide").font(.system(size: 13, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(.secondary).padding(.trailing, 8)
+                .accessibilityElement(children: .ignore).accessibilityLabel("Glide")
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .onAppear { NSApp.activate() }
     }
 }
 
-/// Large title and subtitle shared by every step.
-private struct StepHeader: View {
-    let title: String
-    let subtitle: String
+/// Four segments; the current one is longer and the finished ones are dimmer.
+private struct StepDots: View {
+    let step: Int
+    let count: Int
 
     var body: some View {
-        VStack(spacing: 8) {
-            Text(title).font(.system(size: 30, weight: .semibold, design: .rounded))
-            Text(subtitle).font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        HStack(spacing: 5) {
+            ForEach(0..<count, id: \.self) { i in
+                Capsule()
+                    .fill(i == step ? AnyShapeStyle(Tokens.tint) : i < step ? AnyShapeStyle(Tokens.tint.opacity(0.45)) : AnyShapeStyle(.quaternary))
+                    .frame(width: i == step ? 22 : 6, height: 6)
+            }
         }
-        .padding(.top, 20).padding(.bottom, 28)
+        .animation(Tokens.spring, value: step)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(step + 1) of \(count)")
     }
 }
 
-/// The card that asks whether the thing just tried worked.
-private struct CheckCard<Content: View>: View {
-    @ViewBuilder let content: Content
+/// The frame every step shares: title, one line of help, a stage, and actions pinned to the bottom.
+private struct StepPage<Title: View, Stage: View, Footer: View>: View {
+    let subtitle: String
+    @ViewBuilder let title: Title
+    @ViewBuilder let stage: Stage
+    @ViewBuilder let footer: Footer
 
     var body: some View {
-        VStack(spacing: 18) { content }
-            .padding(28)
-            .frame(maxWidth: 520)
-            .background(RoundedRectangle(cornerRadius: 16).fill(.background.secondary))
+        VStack(spacing: 0) {
+            HStack(spacing: 10) { title }
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .frame(height: 34)  // a key cap in the title must not push the stage down
+                .accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
+            Text(subtitle).font(.system(size: 15)).foregroundStyle(.secondary).padding(.top, 6)
+            stage
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 28)
+            HStack(spacing: 10) { footer }
+                .controlSize(.large)
+                .frame(height: 36)
+                .padding(.top, 20)
+        }
+        .padding(.horizontal, 100).padding(.top, 4).padding(.bottom, 28)
     }
 }
+
+extension StepPage where Title == Text {
+    init(title: String, subtitle: String, @ViewBuilder stage: () -> Stage, @ViewBuilder footer: () -> Footer) {
+        self.init(subtitle: subtitle, title: { Text(title) }, stage: stage, footer: footer)
+    }
+}
+
+/// A status note set like an expression mark in a score, with a tick once the step has worked.
+private struct StatusMark: View {
+    let text: String
+    var done = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if done { Tick().font(.body) }
+            Text(text).font(.system(size: 15, design: .serif)).italic().foregroundStyle(done ? .primary : .secondary)
+        }
+        .animation(Tokens.spring, value: done)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct Tick: View {
+    var body: some View {
+        Image(systemName: "checkmark.circle.fill").foregroundStyle(Tokens.tint)
+            .transition(.scale(scale: 0.5).combined(with: .opacity))
+            .accessibilityLabel("Done")
+    }
+}
+
+/// Help for a step that isn't working, shown from the button that asks.
+private struct HelpNote<Action: View>: View {
+    let text: String
+    @ViewBuilder let action: Action
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+            action
+        }
+        .frame(width: 260, alignment: .leading)
+        .padding(16)
+    }
+}
+
+// MARK: Permissions
 
 private struct PermissionsStep: View {
     @Environment(AppModel.self) private var app
     let next: () -> Void
 
     var body: some View {
-        VStack {
-            StepHeader(title: "Let Glide listen and type", subtitle: "Two switches in System Settings. Glide opens the right pane and points at each one.")
-            HStack(alignment: .top, spacing: 24) {
-                VStack(spacing: 12) {
-                    PermissionRow(
-                        granted: app.hasMicrophone, title: app.hasMicrophone ? "Glide can hear you" : "Let Glide hear you",
-                        detail: "The microphone is used only while you hold your hotkey.", action: app.requestMicrophone)
-                    PermissionRow(
-                        granted: app.hasAccessibility, title: "Let Glide paste text",
-                        detail: "Accessibility lets it hear your hotkey and type at your cursor.", action: app.guideAccessibility)
-                    ModelRow()
+        StepPage(title: "Let Glide listen and type", subtitle: "Glide needs two permissions to hear you and type for you.") {
+            VStack(spacing: 0) {
+                SetupRow(symbol: "mic.fill", title: "Microphone", detail: "Glide listens only while you hold your hotkey.") {
+                    Grant(done: app.hasMicrophone, label: "Allow", action: app.requestMicrophone)
                 }
-                .frame(maxWidth: 380)
-                SwitchIllustration()
+                Divider().padding(.leading, 76)
+                SetupRow(symbol: "accessibility", title: "Accessibility", detail: "Lets Glide hear your hotkey and type at your cursor.") {
+                    Grant(done: app.hasAccessibility, label: "Open Settings…", action: app.guideAccessibility)
+                }
+                Divider().padding(.leading, 76)
+                ModelRow()
             }
+            .card(padding: 0)
+        } footer: {
+            Label("Nothing is uploaded. Your audio stays on this Mac.", systemImage: "lock.fill")
+                .font(.callout).foregroundStyle(.secondary)
             Spacer()
             Button("Continue", action: next)
-                .buttonStyle(.borderedProminent).controlSize(.large)
-                .disabled(!(app.hasMicrophone && app.hasAccessibility))
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .disabled(!granted)
         }
+        .onChange(of: granted) { _, now in
+            guard now else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(0.8))  // long enough to see both ticks
+                next()
+            }
+        }
+    }
+
+    private var granted: Bool { app.hasMicrophone && app.hasAccessibility }
+}
+
+private struct SetupRow<Trailing: View>: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol).font(.system(size: 17, weight: .medium))
+                .frame(width: 40, height: 40)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 15, weight: .semibold))
+                Text(detail).font(.system(size: 13)).foregroundStyle(.secondary).monospacedDigit()
+            }
+            Spacer(minLength: 12)
+            trailing
+        }
+        .padding(.horizontal, 22).frame(maxHeight: .infinity)
     }
 }
 
-private struct PermissionRow: View {
-    let granted: Bool
-    let title: String
-    let detail: String
+/// The button that asks for a permission, replaced by a tick once it is granted.
+private struct Grant: View {
+    let done: Bool
+    let label: String
     let action: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "circle")
-                .font(.title3).foregroundStyle(granted ? Tokens.tint : .secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline)
-                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            if !granted { Button("Enable", action: action) }
+        ZStack {
+            if done { Tick().font(.title2) } else { Button(label, action: action).transition(.opacity) }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(.background.secondary))
-        .animation(Tokens.spring, value: granted)
+        .animation(Tokens.spring, value: done)
     }
 }
 
@@ -121,112 +223,109 @@ private struct ModelRow: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: app.modelProgress == nil ? "checkmark.circle.fill" : "arrow.down.circle")
-                .font(.title3).foregroundStyle(app.modelProgress == nil ? Tokens.tint : .secondary)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Speech model").font(.headline)
-                if app.modelFailed {
-                    Text("The download failed. Check your connection and reopen Glide.").font(.callout).foregroundStyle(.secondary)
-                } else if let progress = app.modelProgress {
-                    Text("467 MB, downloading. It runs on this Mac.").font(.callout).foregroundStyle(.secondary)
-                    ProgressView(value: progress)
-                } else {
-                    Text("Ready. It runs on this Mac.").font(.callout).foregroundStyle(.secondary)
-                }
+        SetupRow(symbol: "waveform", title: "Speech model", detail: detail) {
+            if app.modelFailed {
+                Button("Try Again", action: app.retryModel)
+            } else if let progress = app.modelProgress {
+                ProgressView(value: progress).frame(width: 72)
+            } else {
+                Tick().font(.title2)
             }
-            Spacer(minLength: 0)
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(.background.secondary))
+    }
+
+    private var detail: String {
+        if app.modelFailed { return "It failed to load. Check your connection." }
+        if let progress = app.modelProgress { return "Getting ready, \(Int(progress * 100))%. It runs on this Mac." }
+        return "Ready. It runs on this Mac."
     }
 }
 
-/// A drawing of the Accessibility list with Glide's switch on.
-private struct SwitchIllustration: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Accessibility").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.bottom, 8)
-            ForEach(["Terminal", "Glide", "Shortcuts"], id: \.self) { name in
-                HStack {
-                    if name == "Glide" {
-                        Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 20, height: 20)
-                    } else {
-                        RoundedRectangle(cornerRadius: 5).fill(.quaternary).frame(width: 20, height: 20)
-                    }
-                    Text(name).font(.callout).opacity(name == "Glide" ? 1 : 0.5)
-                    Spacer()
-                    Capsule().fill(name == "Glide" ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.quaternary))
-                        .frame(width: 30, height: 18)
-                        .overlay(alignment: name == "Glide" ? .trailing : .leading) { Circle().fill(.white).padding(2) }
-                }
-                .padding(.vertical, 8)
-                if name != "Shortcuts" { Divider() }
-            }
-        }
-        .padding(16)
-        .frame(width: 240)
-        .background(RoundedRectangle(cornerRadius: 12).fill(.background.secondary))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("In System Settings, turn on the switch next to Glide under Accessibility.")
-    }
-}
+// MARK: Microphone
 
 private struct MicrophoneStep: View {
     @Environment(AppModel.self) private var app
+    @State private var heard: TimeInterval = 0
+    @State private var lastLevel = Date.now
+    @State private var showHelp = false
     let next: () -> Void
 
     var body: some View {
         @Bindable var app = app
-        VStack {
-            StepHeader(title: "Check your microphone", subtitle: "Built-in and wired microphones work best. Bluetooth headsets are less reliable.")
-            CheckCard {
-                Text("Do the bars move when you speak?").font(.title3.weight(.semibold))
-                LevelBars(level: app.bar.level)
-                HStack {
-                    Picker("Microphone", selection: $app.microphoneID) {
-                        Text("System Default").tag("")
-                        ForEach(app.microphones) { Text($0.name).tag($0.id) }
-                    }
-                    .labelsHidden().fixedSize()
-                    .onChange(of: app.microphoneID) {
-                        app.stopMicTest()
-                        app.startMicTest()
-                    }
-                    Spacer()
-                    Button("Yes", action: next).buttonStyle(.borderedProminent)
-                }
+        StepPage(title: "Check your microphone", subtitle: "Say a few words. The bars should move with your voice.") {
+            VStack(spacing: 22) {
+                LiveWave(bar: app.bar)
+                StatusMark(text: heard >= 1 ? "Glide can hear you" : "Listening", done: heard >= 1)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .card(padding: 0)
+        } footer: {
+            Picker("Microphone", selection: $app.microphoneID) {
+                Text("System Default").tag("")
+                ForEach(app.microphones) { Text($0.name).tag($0.id) }
+            }
+            .labelsHidden().frame(maxWidth: 220)
+            .onChange(of: app.microphoneID) {
+                app.stopMicTest()
+                app.startMicTest()
+            }
+            Spacer()
+            Button("Not Moving?") { showHelp = true }
+                .popover(isPresented: $showHelp, arrowEdge: .top) {
+                    HelpNote(text: "Choose another microphone from the menu on the left. A Bluetooth headset may stay silent until it switches to its call microphone, so try the built-in one.") {}
+                }
+            Button("Continue", action: next).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
         .onAppear {
             app.refreshMicrophones()
             app.startMicTest()
         }
         .onDisappear { app.stopMicTest() }
+        // About a second of speech moves on by itself.
+        .onChange(of: app.bar.level) { _, level in
+            let now = Date.now
+            if level > 0.35 { heard += min(now.timeIntervalSince(lastLevel), 0.1) }
+            lastLevel = now
+        }
+        .task(id: heard >= 1) {
+            if heard >= 1, (try? await Task.sleep(for: .seconds(0.7))) != nil { next() }
+        }
     }
 }
 
-private struct LevelBars: View {
-    let level: Float
+/// The last few seconds of microphone level, newest on the right.
+private struct LiveWave: View {
+    let bar: BarModel
+    @State private var history = [Float](repeating: 0, count: 56)
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<15, id: \.self) { i in
-                let weight = 0.4 + 0.6 * cos(Double(i - 7) / 7 * .pi / 2)
-                Capsule().fill(Tokens.tint)
-                    .frame(width: 6, height: 6 + 54 * CGFloat(Double(level) * weight))
+        HStack(spacing: 4) {
+            ForEach(history.indices, id: \.self) { i in
+                Capsule().fill(Tokens.tintGraphic.opacity(0.25 + 0.75 * Double(i) / Double(history.count - 1)))
+                    .frame(width: 4, height: 4 + 104 * CGFloat(history[i]))
             }
         }
-        .frame(height: 64)
-        .animation(.easeOut(duration: 0.08), value: level)
+        .frame(height: 108)
+        .animation(.linear(duration: 0.05), value: history)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+                history.removeFirst()
+                history.append(bar.level)
+            }
+        }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Microphone level")
-        .accessibilityValue("\(Int(level * 100)) percent")
+        .accessibilityValue("\(Int(bar.level * 100)) percent")
     }
 }
+
+// MARK: Hotkey
 
 private struct HotkeyStep: View {
     @Environment(AppModel.self) private var app
     @State private var showHelp = false
+    @State private var heard = false
     let next: () -> Void
 
     private var lit: Bool {
@@ -235,66 +334,123 @@ private struct HotkeyStep: View {
     }
 
     var body: some View {
-        VStack {
-            StepHeader(title: "Choose your hotkey", subtitle: "We suggest fn. Hold it to dictate, double-tap to keep recording.")
-            CheckCard {
-                Text("Does the key light up while you hold it?").font(.title3.weight(.semibold))
-                Text("fn").font(.system(size: 28, weight: .medium, design: .rounded))
-                    .frame(width: 88, height: 72)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(lit ? AnyShapeStyle(Tokens.tint) : AnyShapeStyle(.quaternary)))
-                    .foregroundStyle(lit ? .white : .primary)
-                    .scaleEffect(lit ? 0.96 : 1)
-                    .animation(Tokens.spring, value: lit)
-                if showHelp {
-                    Text("macOS may be using fn itself. In Keyboard settings, set “Press fn key to” to “Do Nothing”, then try again.")
-                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button("Open Keyboard Settings") {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
-                    }
-                }
-                HStack {
-                    Spacer()
-                    Button("No") { showHelp = true }
-                    Button("Yes", action: next).buttonStyle(.borderedProminent)
+        StepPage(subtitle: "Hold it now and say anything. Double-tap to keep recording.") {
+            Text("Hold")
+            Keycap("fn", size: 23)
+            Text("to dictate")
+        } stage: {
+            VStack(spacing: 16) {
+                FnKey(lit: lit)
+                StatusMark(text: heard ? "Glide heard your key" : lit ? "Listening" : "Waiting for fn", done: heard)
+            }
+            .padding(.bottom, 48)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 8) {
+                    Text("The bar at the edge of your screen does the same.").font(.callout).foregroundStyle(.secondary)
+                    BarPreview(model: app.bar)
                 }
             }
+            .card(padding: 0)
+        } footer: {
+            Button("Nothing Happens?") { showHelp = true }
+                .popover(isPresented: $showHelp, arrowEdge: .top) {
+                    HelpNote(text: "macOS may be using fn itself. In Keyboard settings, set “Press fn key to” to “Do Nothing”, then try again.") {
+                        Button("Open Keyboard Settings") {
+                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
+                        }
+                    }
+                }
+            Spacer()
+            Button("Continue", action: next).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
         .onAppear { app.listenOnly = true }
         .onDisappear { app.listenOnly = false }
+        // A full hold and release ends in the bar's tick.
+        .onChange(of: app.bar.state) { _, state in if state == .completed { heard = true } }
+        .task(id: heard) {
+            if heard, (try? await Task.sleep(for: .seconds(0.8))) != nil { next() }
+        }
     }
 }
+
+/// The fn key as it looks on a Mac keyboard. It sinks and lights while held.
+private struct FnKey: View {
+    let lit: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        ZStack {
+            Text("fn").font(.system(size: 19, weight: .medium, design: .rounded))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            Image(systemName: "globe").font(.system(size: 17, weight: .medium))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
+        .padding(12)
+        .frame(width: 88, height: 88)
+        // Dark ink on the lit key: white fails contrast on the Dark Mode tint.
+        .foregroundStyle(lit ? AnyShapeStyle(Color(red: 0.16, green: 0.07, blue: 0.02)) : AnyShapeStyle(.primary))
+        // Opaque fills: the cap covers its side as it sinks.
+        .background(shape.fill(lit ? Tokens.tintGraphic : Tokens.cardFill.mix(with: .primary, by: 0.16)))
+        .overlay(shape.strokeBorder(.primary.opacity(lit ? 0 : 0.1)))
+        .offset(y: lit ? 4 : 0)
+        .background(shape.fill(Tokens.cardFill.mix(with: .black, by: 0.3)).offset(y: 5))
+        .animation(Tokens.spring, value: lit)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(lit ? "fn key, held" : "fn key")
+    }
+}
+
+// MARK: First dictation
 
 private struct TryStep: View {
     @Environment(AppModel.self) private var app
     @State private var text = ""
     @FocusState private var focused: Bool
+    @State private var dictated = 0
     let done: () -> Void
 
+    /// Text arrived from a dictation, not from typing.
+    private var worked: Bool { dictated > 0 && !text.isEmpty }
+
     var body: some View {
-        VStack {
-            StepHeader(title: "Say something", subtitle: "Click in the box, hold fn and speak.")
-            CheckCard {
-                Text("Did your words appear?").font(.title3.weight(.semibold))
-                if let progress = app.modelProgress {
-                    VStack(spacing: 6) {
-                        Text("The speech model is still downloading.").foregroundStyle(.secondary)
-                        ProgressView(value: progress)
-                    }
-                }
-                TextField("Try it here", text: $text, axis: .vertical)
-                    .lineLimit(3...5)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focused)
-                HStack {
-                    Button("Try Again") {
-                        text = ""
-                        focused = true
-                    }
-                    Spacer()
-                    Button("Start Using Glide", action: done).buttonStyle(.borderedProminent)
-                }
+        StepPage(title: "Say something", subtitle: "Click in the box, hold fn and speak.") {
+            TextField("Your words appear here", text: $text, axis: .vertical)
+                .textFieldStyle(.plain).font(.system(size: 17)).lineSpacing(3)
+                .focused($focused)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(22)
+            .contentShape(Rectangle())
+            .onTapGesture { focused = true }
+            .card(padding: 0)
+            .overlay {
+                RoundedRectangle(cornerRadius: Tokens.cardRadius).strokeBorder(Tokens.tint.opacity(focused ? 0.8 : 0), lineWidth: 1.5)
             }
+            .animation(Tokens.spring, value: focused)
+        } footer: {
+            // The model's state takes this slot until it is ready: nothing can be dictated before then.
+            if app.modelFailed {
+                Text("The speech model failed to load.").font(.callout).foregroundStyle(.secondary)
+                Button("Try Again", action: app.retryModel)
+            } else if let progress = app.modelProgress {
+                ProgressView(value: progress).frame(width: 96)
+                Text("The speech model is still getting ready.").font(.callout).foregroundStyle(.secondary)
+            } else if worked {
+                StatusMark(text: "That worked", done: true).transition(.opacity)
+            }
+            Spacer()
+            Button("Clear") {
+                text = ""
+                focused = true
+            }
+            .disabled(text.isEmpty)
+            Button("Start Using Glide", action: done).buttonStyle(.borderedProminent)
         }
-        .onAppear { focused = true }
+        .animation(Tokens.spring, value: worked)
+        .onAppear {
+            focused = true
+            dictated = 0
+        }
+        .onChange(of: app.bar.state) { _, state in if state == .completed { dictated += 1 } }
     }
 }

@@ -10,6 +10,7 @@ public final class HotkeyListener: @unchecked Sendable {
     private static let escapeKeyCode: Int64 = 53
 
     private static let vKeyCode: Int64 = 9
+    private static let returnKeyCodes: Set<Int64> = [36, 76]  // Return and keypad Enter
 
     private let onAction: @Sendable (HotkeyGesture.Action) -> Void
     private let onPasteLast: @Sendable () -> Void
@@ -19,6 +20,10 @@ public final class HotkeyListener: @unchecked Sendable {
     private var fnDown = false
     private var paused = false
     private var tap: CFMachPort?
+    private var returns = 0
+
+    /// Return presses seen so far, from any app. The edit tracker watches it to tell a sent message from a new line.
+    public var returnCount: Int { lock.withLock { returns } }
 
     /// Both callbacks run on the main queue.
     public init(onAction: @escaping @Sendable (HotkeyGesture.Action) -> Void, onPasteLast: @escaping @Sendable () -> Void) {
@@ -72,6 +77,7 @@ public final class HotkeyListener: @unchecked Sendable {
         var action: HotkeyGesture.Action?
         var pasteLast = false
         let swallow: Bool = lock.withLock {
+            if type == .keyDown, Self.returnKeyCodes.contains(keyCode) { returns += 1 }
             guard !paused else { return false }
             switch type {
             case .flagsChanged where keyCode == Self.fnKeyCode:
