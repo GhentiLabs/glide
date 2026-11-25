@@ -42,7 +42,8 @@ guard !clips.isEmpty else {
     exit(1)
 }
 
-let recognizer = ParakeetRecognizer()
+// GLIDE_MODEL_DIR loads the model from another folder, such as a copy made outside the app.
+let recognizer = ProcessInfo.processInfo.environment["GLIDE_MODEL_DIR"].map { SpeechRecognizer(directory: URL(fileURLWithPath: $0)) } ?? SpeechRecognizer()
 try await recognizer.prepare { _ in }
 if let vocab = ProcessInfo.processInfo.environment["GLIDE_VOCAB"] {
     try await recognizer.setVocabulary(vocab.split(separator: ",").map { DictionaryEntry(word: String($0)) })

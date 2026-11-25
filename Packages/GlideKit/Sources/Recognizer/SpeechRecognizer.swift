@@ -2,25 +2,31 @@ import Foundation
 import FluidAudio
 import GlideCore
 
-/// Parakeet TDT 0.6B v3 on Core ML, through FluidAudio.
-public actor ParakeetRecognizer: GlideCore.Recognizer {
+/// Fluid Speech Pro on Core ML, through FluidAudio's Parakeet v3 decoder.
+public actor SpeechRecognizer: GlideCore.Recognizer {
     private var manager: AsrManager?
+    private let directory: URL
     /// A separate 110M CTC model that checks vocabulary words against the audio. Downloaded once the vocabulary has a word.
     private var ctcLoad: Task<CtcModels, Error>?
     private var boosting: VocabularyBoostingSession?
     private var vocabularyVersion = 0
 
-    public init() {}
+    public init(directory: URL = SpeechRecognizer.modelDirectory) { self.directory = directory }
 
     public func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
         guard manager == nil else { return }
-        let models = try await AsrModels.downloadAndLoad(version: .v3) { progress($0.fractionCompleted) }
+        if !FluidSpeechPro.isInstalled(at: directory) {
+            // Downloading is most of the wait; loading for the Neural Engine takes the rest the first time.
+            try await FluidSpeechPro.download(to: directory) { progress(0.95 * $0) }
+        }
+        // Same contract as Parakeet Ultra, which Fluid Speech Pro is built on: FluidAudio decodes it as v3.
+        let models = try AsrModels.loadLocal(from: directory, version: .ultra)
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
         self.manager = manager
     }
 
-    /// Boosts these words from the next dictation on. A word replaces what Parakeet wrote only where the CTC model hears it.
+    /// Boosts these words from the next dictation on. A word replaces what the model wrote only where the CTC model hears it.
     /// Dictation keeps working unboosted while the CTC model downloads, or if it fails to.
     public func setVocabulary(_ entries: [DictionaryEntry]) async throws {
         vocabularyVersion += 1
@@ -53,7 +59,12 @@ public actor ParakeetRecognizer: GlideCore.Recognizer {
     }
 }
 
-extension ParakeetRecognizer {
+extension SpeechRecognizer {
     /// Where the model is stored on disk.
-    public static var modelDirectory: URL { AsrModels.defaultCacheDirectory(for: .v3) }
+    public static var modelDirectory: URL {
+        URL.applicationSupportDirectory.appendingPathComponent("Glide/Models/fluid-speech-pro-coreml", isDirectory: true)
+    }
+
+    public static let modelName = "Fluid Speech Pro"
+    public static let attribution = FluidSpeechPro.attribution
 }

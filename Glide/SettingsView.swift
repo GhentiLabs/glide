@@ -107,18 +107,22 @@ private struct ModelSettings: View {
 
     var body: some View {
         Form {
-            LabeledContent("Speech model", value: "Parakeet TDT 0.6B v3")
-            LabeledContent("Status") {
-                if app.modelFailed {
-                    Text("Failed to load")
-                } else if let progress = app.modelProgress {
-                    ProgressView(value: progress).frame(width: 160)
-                } else {
-                    Text("Ready")
+            Section {
+                LabeledContent("Speech model", value: SpeechRecognizer.modelName)
+                LabeledContent("Status") {
+                    if app.modelFailed {
+                        Text("Failed to load")
+                    } else if let progress = app.modelProgress {
+                        ProgressView(value: progress).frame(width: 160)
+                    } else {
+                        Text("Ready")
+                    }
                 }
+                LabeledContent("Runs on", value: "This Mac")
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([SpeechRecognizer.modelDirectory]) }
+            } footer: {
+                Text(SpeechRecognizer.attribution + " CC BY 4.0.").foregroundStyle(.secondary)
             }
-            LabeledContent("Runs on", value: "This Mac")
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([ParakeetRecognizer.modelDirectory]) }
         }
     }
 }

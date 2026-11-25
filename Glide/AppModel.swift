@@ -13,7 +13,7 @@ import Refiner
 import Store
 import os
 
-/// Runs Glide: hotkey → microphone → Parakeet → rules → paste → edit tracking, plus the state every window reads.
+/// Runs Glide: hotkey → microphone → Fluid Speech Pro → rules → paste → edit tracking, plus the state every window reads.
 @MainActor @Observable
 final class AppModel {
     let store = Store(directory: Store.defaultDirectory)
@@ -54,7 +54,7 @@ final class AppModel {
 
     @ObservationIgnored private lazy var barPanel = BarPanel(model: bar)
     @ObservationIgnored private let recorder = AudioRecorder()
-    @ObservationIgnored private let recognizer = ParakeetRecognizer()
+    @ObservationIgnored private let recognizer = SpeechRecognizer()
     @ObservationIgnored private let cues = Cues()
     @ObservationIgnored private let guide = PermissionGuide()
     @ObservationIgnored private var listener: HotkeyListener?
