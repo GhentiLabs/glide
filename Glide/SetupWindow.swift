@@ -6,6 +6,7 @@ import SwiftUI
 struct SetupWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step = 0
 
     var body: some View {
@@ -18,12 +19,12 @@ struct SetupWindow: View {
                 UserDefaults.standard.set(true, forKey: "setupDone")
                 dismissWindow(id: "setup")
                 app.bar.show(Toast(
-                    .tip, symbol: "arrow.down", title: "Glide lives here",
+                    .tip, symbol: "waveform", title: "Glide lives here",
                     message: "Hold fn in any app to dictate. Drag the bar to move it.", keycap: "fn", duration: 9))
             }
             }
         }
-        .transition(.blurReplace)
+        .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
         .id(step)
         .animation(Tokens.spring, value: step)
         .frame(width: 780, height: 500)
@@ -33,6 +34,7 @@ struct SetupWindow: View {
             if step > 0 {
                 ToolbarItem(placement: .navigation) {
                     Button("Back", systemImage: "chevron.left") { step -= 1 }
+                        .keyboardShortcut("[").help("Back")
                 }
             }
             ToolbarItem(placement: .principal) { StepDots(step: step, count: 4) }
@@ -71,15 +73,18 @@ private struct StepDots: View {
 }
 
 /// The frame every step shares: title, one line of help, a stage, and actions pinned to the bottom.
-private struct StepPage<Stage: View, Footer: View>: View {
-    let title: String
+private struct StepPage<Title: View, Stage: View, Footer: View>: View {
     let subtitle: String
+    @ViewBuilder let title: Title
     @ViewBuilder let stage: Stage
     @ViewBuilder let footer: Footer
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(title).font(.system(size: 28, weight: .semibold, design: .rounded))
+            HStack(spacing: 10) { title }
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .frame(height: 34)  // a key cap in the title must not push the stage down
+                .accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
             Text(subtitle).font(.system(size: 15)).foregroundStyle(.secondary).padding(.top, 6)
             stage
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -90,6 +95,12 @@ private struct StepPage<Stage: View, Footer: View>: View {
                 .padding(.top, 20)
         }
         .padding(.horizontal, 100).padding(.top, 4).padding(.bottom, 28)
+    }
+}
+
+extension StepPage where Title == Text {
+    init(title: String, subtitle: String, @ViewBuilder stage: () -> Stage, @ViewBuilder footer: () -> Footer) {
+        self.init(subtitle: subtitle, title: { Text(title) }, stage: stage, footer: footer)
     }
 }
 
@@ -214,7 +225,7 @@ private struct ModelRow: View {
     var body: some View {
         SetupRow(symbol: "waveform", title: "Speech model", detail: detail) {
             if app.modelFailed {
-                Image(systemName: "exclamationmark.triangle.fill").font(.title3).foregroundStyle(.red).accessibilityLabel("Failed")
+                Button("Try Again", action: app.retryModel)
             } else if let progress = app.modelProgress {
                 ProgressView(value: progress).frame(width: 72)
             } else {
@@ -224,8 +235,8 @@ private struct ModelRow: View {
     }
 
     private var detail: String {
-        if app.modelFailed { return "The download failed. Check your connection and reopen Glide." }
-        if let progress = app.modelProgress { return "Downloading, \(Int(progress * 100))%. It runs on this Mac." }
+        if app.modelFailed { return "It failed to load. Check your connection." }
+        if let progress = app.modelProgress { return "Getting ready, \(Int(progress * 100))%. It runs on this Mac." }
         return "Ready. It runs on this Mac."
     }
 }
@@ -276,13 +287,8 @@ private struct MicrophoneStep: View {
             if level > 0.35 { heard += min(now.timeIntervalSince(lastLevel), 0.1) }
             lastLevel = now
         }
-        .onChange(of: heard >= 1) { _, enough in if enough { advance() } }
-    }
-
-    private func advance() {
-        Task {
-            try? await Task.sleep(for: .seconds(0.7))
-            next()
+        .task(id: heard >= 1) {
+            if heard >= 1, (try? await Task.sleep(for: .seconds(0.7))) != nil { next() }
         }
     }
 }
@@ -328,7 +334,11 @@ private struct HotkeyStep: View {
     }
 
     var body: some View {
-        StepPage(title: "Hold fn to dictate", subtitle: "Hold it now and say anything. Double-tap to keep recording.") {
+        StepPage(subtitle: "Hold it now and say anything. Double-tap to keep recording.") {
+            Text("Hold")
+            Keycap("fn", size: 23)
+            Text("to dictate")
+        } stage: {
             VStack(spacing: 16) {
                 FnKey(lit: lit)
                 StatusMark(text: heard ? "Glide heard your key" : lit ? "Listening" : "Waiting for fn", done: heard)
@@ -357,13 +367,9 @@ private struct HotkeyStep: View {
         .onAppear { app.listenOnly = true }
         .onDisappear { app.listenOnly = false }
         // A full hold and release ends in the bar's tick.
-        .onChange(of: app.bar.state) { _, state in
-            guard state == .completed else { return }
-            heard = true
-            Task {
-                try? await Task.sleep(for: .seconds(0.8))
-                next()
-            }
+        .onChange(of: app.bar.state) { _, state in if state == .completed { heard = true } }
+        .task(id: heard) {
+            if heard, (try? await Task.sleep(for: .seconds(0.8))) != nil { next() }
         }
     }
 }
@@ -409,19 +415,11 @@ private struct TryStep: View {
 
     var body: some View {
         StepPage(title: "Say something", subtitle: "Click in the box, hold fn and speak.") {
-            VStack(alignment: .leading, spacing: 14) {
-                if let progress = app.modelProgress {
-                    HStack(spacing: 10) {
-                        Text("The speech model is still downloading.").font(.callout).foregroundStyle(.secondary)
-                        ProgressView(value: progress).frame(width: 96)
-                    }
-                }
-                TextField("Your words appear here", text: $text, axis: .vertical)
-                    .textFieldStyle(.plain).font(.system(size: 17)).lineSpacing(3)
-                    .focused($focused)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .padding(22)
+            TextField("Your words appear here", text: $text, axis: .vertical)
+                .textFieldStyle(.plain).font(.system(size: 17)).lineSpacing(3)
+                .focused($focused)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(22)
             .contentShape(Rectangle())
             .onTapGesture { focused = true }
             .card(padding: 0)
@@ -430,9 +428,18 @@ private struct TryStep: View {
             }
             .animation(Tokens.spring, value: focused)
         } footer: {
-            if worked { StatusMark(text: "That worked", done: true).transition(.opacity) }
+            // The model's state takes this slot until it is ready: nothing can be dictated before then.
+            if app.modelFailed {
+                Text("The speech model failed to load.").font(.callout).foregroundStyle(.secondary)
+                Button("Try Again", action: app.retryModel)
+            } else if let progress = app.modelProgress {
+                ProgressView(value: progress).frame(width: 96)
+                Text("The speech model is still getting ready.").font(.callout).foregroundStyle(.secondary)
+            } else if worked {
+                StatusMark(text: "That worked", done: true).transition(.opacity)
+            }
             Spacer()
-            Button("Try Again") {
+            Button("Clear") {
                 text = ""
                 focused = true
             }

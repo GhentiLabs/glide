@@ -102,6 +102,8 @@ final class AppModel {
         await waitForAccessibility()
     }
 
+    func retryModel() { Task { await loadModel() } }
+
     private func loadModel() async {
         modelFailed = false
         do {
@@ -340,7 +342,7 @@ final class AppModel {
             Toast(
                 symbol: "arrow.down.circle", title: "The speech model isn't ready",
                 message: modelFailed ? "It failed to load." : "It's still being set up.",
-                actions: modelFailed ? [.init("Try Again", primary: true) { [weak self] in Task { await self?.loadModel() } }] : [])
+                actions: modelFailed ? [.init("Try Again", primary: true) { [weak self] in self?.retryModel() }] : [])
         case .nothingHeard:
             Toast(symbol: "waveform", title: "Nothing heard", message: "Hold fn while you speak, then let go.", duration: 4)
         case .recognitionFailed(let reason):
