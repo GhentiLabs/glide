@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AudioCapture
+import CryptoKit
 import EditTracker
 import FieldContext
 import GlideCore
@@ -17,6 +18,8 @@ import os
 @MainActor @Observable
 final class AppModel {
     let store = Store(directory: Store.defaultDirectory)
+    let audio = AudioStore(directory: AudioStore.defaultDirectory, key: AppModel.audioKey())
+    let account: Account
     let bar = BarModel()
     /// 0...1 while the model downloads or loads; nil once it is ready.
     private(set) var modelProgress: Double? = 0 {
@@ -68,6 +71,7 @@ final class AppModel {
     private let log = Logger(subsystem: "com.ghentilabs.glide", category: "dictation")
 
     init() {
+        account = Account(store: store, audio: audio)
         microphoneID = UserDefaults.standard.string(forKey: "microphoneID") ?? ""
         recorder.microphoneID = microphoneID.isEmpty ? nil : microphoneID
         lastApp = NSWorkspace.shared.frontmostApplication.flatMap { $0.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : $0 }
@@ -103,6 +107,10 @@ final class AppModel {
         bar.onCancel = { [weak self] in self?.endHandsFree(.cancel) }
         bar.onOpenSettings = { [weak self] in self?.open("settings") }
         store.onVocabularyChange = { [weak self] in self?.boost($0) }
+        store.onRecordsChange = { [weak self] in self?.account.recordsChanged($0, deleted: $1) }
+        audio.prune(store.records)
+        Telemetry.start()
+        Telemetry.event("app_launched")
         boost(store.dictionary)
         Task { await loadModel() }
         await waitForAccessibility()
@@ -277,6 +285,9 @@ final class AppModel {
                 message: "Your words are saved. Paste them yourself if you meant to.", keycap: "⌃ ⌘ V"))
             return show(.idle)
         }
+        // Never for a password field: that recording would hold the password.
+        if UserDefaults.standard.object(forKey: "keepRecordings") as? Bool ?? true { keepRecording(samples, for: record.id) }
+        Telemetry.event("dictation", ["seconds": Self.bucket(Double(samples.count) / 16_000)])
         guard let field else {
             skip(record.id, .fieldUnreadable)
             bar.show(Toast(
@@ -328,6 +339,35 @@ final class AppModel {
             \(spans.count) spans \(spans.map(\.kind.rawValue).joined(separator: " "), privacy: .public)
             """)
         if store.records.first(where: { $0.id == id })?.finalSource == .field { learn(from: id, spans: spans, announce: true) }
+        account.share(id)
+    }
+
+    private func keepRecording(_ samples: [Float], for id: UUID) {
+        let audio = audio
+        Task.detached(priority: .utility) {
+            do { try audio.save(try Opus.encode(samples), for: id) } catch {
+                Logger(subsystem: "com.ghentilabs.glide", category: "dictation").error("couldn't keep recording: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Coarse length buckets, so usage events can't fingerprint a dictation.
+    private static func bucket(_ seconds: Double) -> String {
+        switch seconds {
+        case ..<5: "under 5"
+        case ..<15: "5 to 15"
+        case ..<60: "15 to 60"
+        default: "over 60"
+        }
+    }
+
+    /// The key that seals recordings on this Mac, made once and kept in the keychain.
+    private static func audioKey() -> SymmetricKey {
+        let keychain = Keychain(service: "com.ghentilabs.glide")
+        if let data = keychain.data("audioKey"), data.count == 32 { return SymmetricKey(data: data) }
+        let key = SymmetricKey(size: .bits256)
+        keychain.set(key.withUnsafeBytes { Data($0) }, "audioKey")
+        return key
     }
 
     private func skip(_ id: UUID, _ reason: SkipReason) {
@@ -341,6 +381,7 @@ final class AppModel {
         store.forgetWords(learnedFrom: id)
         store.setFinal(id, text: text, source: .history, diff: spans, labellerVersion: Labeller.version)
         if record.excluded != true { learn(from: id, spans: spans, announce: false) }
+        account.share(id)  // replaces what was shared before the fix
     }
 
     /// "Not a Correction" keeps the record out of learning and takes back what it taught.
@@ -348,8 +389,10 @@ final class AppModel {
         store.exclude(id, excluded)
         if excluded {
             store.forgetWords(learnedFrom: id)
+            account.unshare(id)
         } else if let record = store.records.first(where: { $0.id == id }) {
             learn(from: id, spans: record.diff, announce: false)
+            account.share(id)
         }
     }
 
@@ -397,6 +440,7 @@ final class AppModel {
         }
         let inserted = await Task.detached { FieldContext.insert(text) }.value
         log.notice("paste \(read ? "was read but" : "was never read and", privacy: .public) didn't land; accessibility insert \(inserted ? "worked" : "failed", privacy: .public)")
+        Telemetry.event("paste_fallback", ["read": read ? "yes" : "no", "inserted": inserted ? "yes" : "no"])
     }
 
     private func pasteLast() {

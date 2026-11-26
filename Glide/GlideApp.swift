@@ -26,6 +26,13 @@ struct GlideApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
 
+        Window("Ghenti", id: "ghenti") {
+            GhentiWindow().environment(app)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+
         Window("Settings", id: "settings") {
             SettingsView().environment(app)
         }

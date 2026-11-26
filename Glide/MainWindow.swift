@@ -26,17 +26,42 @@ struct MainWindow: View {
     }
 }
 
-/// Bottom left of the sidebar, where an account will go. Until then it says where your data lives.
+/// Bottom left of the sidebar: the Ghenti account, or where your data lives when there isn't one.
 private struct PrivacyCard: View {
     @Environment(AppModel.self) private var app
 
+    private var account: Account { app.account }
+
+    private var detail: String {
+        guard account.user != nil else { return "Sign in to sync" }
+        if !account.syncEnabled { return "Sync is off" }
+        if !account.hasKey { return "Vault locked" }
+        return account.problem == nil ? "Synced" : "Not synced"
+    }
+
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "lock.laptopcomputer").font(.system(size: 17)).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("On this Mac").font(.callout.weight(.medium))
-                Text("Nothing is uploaded").font(.caption).foregroundStyle(.secondary)
+            Button {
+                app.open(account.user == nil ? "ghenti" : "settings")
+            } label: {
+                HStack(spacing: 10) {
+                    if let user = account.user {
+                        Text(String((user.name ?? user.email ?? "G").prefix(1)).uppercased())
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(.background)
+                            .frame(width: 26, height: 26).background(Circle().fill(.primary))
+                    } else {
+                        Image(systemName: "lock.laptopcomputer").font(.system(size: 17)).foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(account.user.map { $0.name ?? $0.email ?? "Ghenti" } ?? "On this Mac").font(.callout.weight(.medium))
+                            .lineLimit(1)
+                        Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(account.user == nil ? "Sign in with Ghenti" : "Ghenti settings")
             Spacer(minLength: 0)
             Button("Settings", systemImage: "gearshape") { app.open("settings") }
                 .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary)
