@@ -8,7 +8,7 @@ import Sentry
 enum Telemetry {
     /// Ghenti's own servers. Empty until that service is deployed, and then nothing is sent for it.
     static let sentryDSN = ""
-    static let aptabaseKey = ""
+    static let aptabaseKey = "A-SH-5704737503"
     static let aptabaseHost = "https://aptabase.ghenti.com"
 
     static var crashReports: Bool {
