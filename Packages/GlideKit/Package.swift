@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "FieldContext", targets: ["FieldContext"]),
         .library(name: "EditTracker", targets: ["EditTracker"]),
         .library(name: "Learning", targets: ["Learning"]),
+        .library(name: "Ghenti", targets: ["Ghenti"]),
         .executable(name: "glide-bench", targets: ["GlideBench"]),
     ],
     dependencies: [
@@ -33,6 +34,7 @@ let package = Package(
         .target(name: "FieldContext", dependencies: ["GlideCore"]),
         .target(name: "EditTracker", dependencies: ["GlideCore"]),
         .target(name: "Learning", dependencies: ["GlideCore"]),
+        .target(name: "Ghenti", dependencies: ["GlideCore", "Store"]),
         .executableTarget(name: "GlideBench", dependencies: ["GlideCore", "Learning", "Recognizer", .product(name: "FluidAudio", package: "FluidAudio")]),
         .testTarget(name: "GlideCoreTests", dependencies: ["GlideCore"]),
         .testTarget(name: "HotkeyEngineTests", dependencies: ["HotkeyEngine"]),
@@ -43,5 +45,6 @@ let package = Package(
         .testTarget(name: "InserterTests", dependencies: ["Inserter"]),
         .testTarget(name: "EditTrackerTests", dependencies: ["EditTracker", "GlideCore"]),
         .testTarget(name: "LearningTests", dependencies: ["Learning", "GlideCore"]),
+        .testTarget(name: "GhentiTests", dependencies: ["Ghenti", "GlideCore", "Store"]),
     ]
 )

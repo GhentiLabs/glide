@@ -23,6 +23,8 @@ public struct DictationRecord: Identifiable, Codable, Sendable, Equatable {
     public var labellerVersion: Int?
     /// The user marked this as not a correction; it never trains anything.
     public var excluded: Bool?
+    /// Last change on any device; the newer copy wins when two devices change one record.
+    public var modified: Date?
 
     public init(
         id: UUID = UUID(), time: Date = .now, app: String?, rawTranscript: String, refinedText: String,

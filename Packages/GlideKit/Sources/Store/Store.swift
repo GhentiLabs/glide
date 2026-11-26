@@ -12,6 +12,8 @@ public final class Store {
 
     /// Called after every change to the vocabulary list, so the recognizer boosts the new list.
     @ObservationIgnored public var onVocabularyChange: (([DictionaryEntry]) -> Void)?
+    /// Called after records change or go away on this Mac, so sync can send them. Changes from sync don't call it.
+    @ObservationIgnored public var onRecordsChange: ((_ changed: [UUID], _ deleted: [UUID]) -> Void)?
     @ObservationIgnored private let recordsURL: URL
     @ObservationIgnored private let dictionaryURL: URL
 
@@ -23,13 +25,16 @@ public final class Store {
         dictionary = Self.load(dictionaryURL) ?? []
     }
 
-    public static var defaultDirectory: URL {
+    nonisolated public static var defaultDirectory: URL {
         URL.applicationSupportDirectory.appendingPathComponent("Glide", isDirectory: true)
     }
 
     public func add(_ record: DictationRecord) {
+        var record = record
+        record.modified = .now
         records.insert(record, at: 0)
         save(records, to: recordsURL)
+        onRecordsChange?([record.id], [])
     }
 
     /// What the edit tracker or the history editor settled on. An edit made in history outranks the tracker,
@@ -50,18 +55,40 @@ public final class Store {
         records[index].finalSource = text == nil ? nil : source
         records[index].labellerVersion = labellerVersion
         if let fieldKind { records[index].fieldKind = fieldKind }
+        records[index].modified = .now
         save(records, to: recordsURL)
+        onRecordsChange?([id], [])
     }
 
     /// "Not a Correction": the record stays in history and never trains anything.
     public func exclude(_ id: UUID, _ excluded: Bool) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         records[index].excluded = excluded ? true : nil
+        records[index].modified = .now
         save(records, to: recordsURL)
+        onRecordsChange?([id], [])
     }
 
     public func clearHistory() {
+        let ids = records.map(\.id)
         records.removeAll()
+        save(records, to: recordsURL)
+        onRecordsChange?([], ids)
+    }
+
+    /// A record from another device: inserted in time order, or replacing this Mac's copy.
+    public func applyRemote(_ record: DictationRecord) {
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+        } else {
+            records.insert(record, at: records.firstIndex { $0.time < record.time } ?? records.endIndex)
+        }
+        save(records, to: recordsURL)
+    }
+
+    /// Deleted on another device.
+    public func removeRemote(_ ids: Set<UUID>) {
+        records.removeAll { ids.contains($0.id) }
         save(records, to: recordsURL)
     }
 

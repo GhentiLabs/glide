@@ -2,7 +2,7 @@ import GlideCore
 import Overlay
 import SwiftUI
 
-/// First run: four steps in one fixed frame. Each shows one thing to try and moves on when it works.
+/// First run: five steps in one fixed frame. Each shows one thing to try and moves on when it works.
 struct SetupWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismissWindow) private var dismissWindow
@@ -15,8 +15,10 @@ struct SetupWindow: View {
             case 0: PermissionsStep { step = 1 }
             case 1: MicrophoneStep { step = 2 }
             case 2: HotkeyStep { step = 3 }
+            case 3: GhentiStep { step = 4 }
             default: TryStep {
                 UserDefaults.standard.set(true, forKey: "setupDone")
+                Telemetry.event("setup_finished")
                 dismissWindow(id: "setup")
                 app.bar.show(Toast(
                     .tip, symbol: "waveform", title: "Glide lives here",
@@ -37,7 +39,7 @@ struct SetupWindow: View {
                         .keyboardShortcut("[").help("Back")
                 }
             }
-            ToolbarItem(placement: .principal) { StepDots(step: step, count: 4) }
+            ToolbarItem(placement: .principal) { StepDots(step: step, count: 5) }
                 .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 6) {
@@ -53,7 +55,7 @@ struct SetupWindow: View {
     }
 }
 
-/// Four segments; the current one is longer and the finished ones are dimmer.
+/// One segment a step; the current one is longer and the finished ones are dimmer.
 private struct StepDots: View {
     let step: Int
     let count: Int
@@ -398,6 +400,57 @@ private struct FnKey: View {
         .animation(Tokens.spring, value: lit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(lit ? "fn key, held" : "fn key")
+    }
+}
+
+// MARK: Ghenti
+
+/// Optional: a Ghenti account for sync, and the two opt-in reports. Everything here is off until switched on.
+private struct GhentiStep: View {
+    let next: () -> Void
+    @Environment(AppModel.self) private var app
+    @State private var crashReports = Telemetry.crashReports
+    @State private var usageStatistics = Telemetry.usageStatistics
+
+    var body: some View {
+        StepPage(title: "Sync with Ghenti", subtitle: "Sign in to keep Glide in step across your Macs. You can skip this.") {
+            HStack(alignment: .top, spacing: 28) {
+                GhentiSignIn(width: 330)
+                VStack(alignment: .leading, spacing: 14) {
+                    SetupSwitch(title: "Sync across my devices", detail: "Encrypted with your vault key",
+                                isOn: Binding(get: { app.account.syncEnabled }, set: { on in Task { await app.account.setSync(on) } }))
+                        .disabled(app.account.user == nil || app.account.activity != nil)
+                    Divider()
+                    SetupSwitch(title: "Send crash reports", detail: "Never what you dictate", isOn: $crashReports)
+                        .onChange(of: crashReports) { _, on in Telemetry.crashReports = on }
+                    SetupSwitch(title: "Send usage statistics", detail: "No account or device ID", isOn: $usageStatistics)
+                        .onChange(of: usageStatistics) { _, on in Telemetry.usageStatistics = on }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } footer: {
+            Spacer()
+            Button(app.account.user == nil ? "Skip" : "Continue", action: next)
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+        }
+    }
+}
+
+/// A label on the left and its switch on the right edge, so a column of them lines up.
+private struct SetupSwitch: View {
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
     }
 }
 

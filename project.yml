@@ -7,6 +7,12 @@ options:
 packages:
   GlideKit:
     path: Packages/GlideKit
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    exactVersion: 9.35.0
+  Aptabase:
+    url: https://github.com/aptabase/aptabase-swift
+    exactVersion: 0.4.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -46,6 +52,12 @@ targets:
         product: EditTracker
       - package: GlideKit
         product: Learning
+      - package: GlideKit
+        product: Ghenti
+      - package: Sentry
+        product: Sentry
+      - package: Aptabase
+        product: Aptabase
     info:
       path: Glide/Info.plist
       properties:
@@ -61,6 +73,13 @@ targets:
       properties:
         com.apple.security.device.audio-input: true
     settings:
+      configs:
+        # Ghenti sign-in returns to https://glide.ghenti.com, which only an app with this associated domain may claim.
+        # The entitlement needs a Developer ID provisioning profile for com.ghentilabs.glide with Associated Domains;
+        # macOS won't launch a build that has the entitlement without one, so Debug goes without until it's installed.
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Glide/GlideRelease.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: Glide Developer ID
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ghentilabs.glide
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
