@@ -26,6 +26,7 @@ private final class ScriptedField: @unchecked Sendable {
     }
 
     var returns: Int { lock.withLock { returnsSoFar } }
+    var readCount: Int { lock.withLock { reads } }
 }
 
 @Suite struct EditTrackerTests {
@@ -119,7 +120,8 @@ private final class ScriptedField: @unchecked Sendable {
     @Test func cancellationIsSuperseded() async {
         let field = ScriptedField([text("draft one"), text("draft two")])
         let task = Task { await track("draft one", field) }
-        try? await Task.sleep(for: .milliseconds(30))
+        // Wait for the tracker to have seen "draft two", not a fixed time, which a busy CI runner overruns.
+        while field.readCount < 3 { try? await Task.sleep(for: .milliseconds(1)) }
         task.cancel()
         #expect(await task.value == .init(final: "draft two", outcome: .superseded))
     }
