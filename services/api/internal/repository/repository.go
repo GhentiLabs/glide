@@ -263,8 +263,9 @@ func (r *Repository) Consent(ctx context.Context, sub string) (Consent, error) {
 }
 
 // SetConsent turns sharing on or off. Off removes every item row in the same
-// transaction; the caller then deletes the objects.
-func (r *Repository) SetConsent(ctx context.Context, sub string, enabled bool) (Consent, error) {
+// transaction and returns their ids; the caller then deletes the objects.
+func (r *Repository) SetConsent(ctx context.Context, sub string, enabled bool) (Consent, []string, error) {
+	var removed []string
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO training_consent (sub, enabled, since) VALUES ($1, $2, CASE WHEN $2 THEN now() END)
 			ON CONFLICT (sub) DO UPDATE SET enabled = $2,
@@ -274,17 +275,23 @@ func (r *Repository) SetConsent(ctx context.Context, sub string, enabled bool) (
 		if enabled {
 			return nil
 		}
-		_, err := tx.Exec(ctx, "DELETE FROM training_items WHERE sub = $1", sub)
+		rows, err := tx.Query(ctx, "DELETE FROM training_items WHERE sub = $1 RETURNING id::text", sub)
+		if err != nil {
+			return err
+		}
+		removed, err = pgx.CollectRows(rows, pgx.RowTo[string])
 		return err
 	})
 	if err != nil {
-		return Consent{}, err
+		return Consent{}, nil, err
 	}
-	return r.Consent(ctx, sub)
+	consent, err := r.Consent(ctx, sub)
+	return consent, removed, err
 }
 
-// PutTrainingItem records an uploaded item, or returns ErrForbidden when consent is off.
-// It holds the consent row so turning sharing off waits for it and then removes it.
+// PutTrainingItem claims id for sub and records an upload, or returns ErrForbidden when
+// consent is off or another account already owns id. It holds the consent row so turning
+// sharing off waits for it.
 func (r *Repository) PutTrainingItem(ctx context.Context, sub, id string, keyVersion int32, size int64) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var enabled bool
@@ -295,10 +302,30 @@ func (r *Repository) PutTrainingItem(ctx context.Context, sub, id string, keyVer
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO training_items (sub, id, key_version, bytes) VALUES ($1, $2, $3, $4)
-			ON CONFLICT (sub, id) DO UPDATE SET key_version = $3, bytes = $4, updated_at = now()`, sub, id, keyVersion, size)
+		tag, err := tx.Exec(ctx, `INSERT INTO training_items (sub, id, key_version, bytes) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (id) DO UPDATE SET key_version = $3, bytes = $4, updated_at = now() WHERE training_items.sub = $1`, sub, id, keyVersion, size)
+		if err == nil && tag.RowsAffected() == 0 {
+			return ErrForbidden
+		}
 		return err
 	})
+}
+
+// OwnsTrainingItem reports whether sub may write id: it is unclaimed or already sub's.
+func (r *Repository) OwnsTrainingItem(ctx context.Context, sub, id string) (bool, error) {
+	var owner string
+	err := r.pool.QueryRow(ctx, "SELECT sub FROM training_items WHERE id = $1", id).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	return owner == sub, err
+}
+
+// HasTrainingItem reports whether sub still has id, after an upload that may have raced consent off.
+func (r *Repository) HasTrainingItem(ctx context.Context, sub, id string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM training_items WHERE sub = $1 AND id = $2)", sub, id).Scan(&exists)
+	return exists, err
 }
 
 func (r *Repository) DeleteTrainingItem(ctx context.Context, sub, id string) error {

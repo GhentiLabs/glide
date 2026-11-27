@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -215,49 +216,60 @@ func (a *App) setTrainingConsent(w http.ResponseWriter, r *http.Request) {
 		err = fail(http.StatusBadRequest, "bad_request", "enabled is required")
 	}
 	var consent repository.Consent
+	var removed []string
 	if err == nil {
-		consent, err = a.repo.SetConsent(r.Context(), sub(r), *input.Enabled)
+		consent, removed, err = a.repo.SetConsent(r.Context(), sub(r), *input.Enabled)
 	}
-	if err == nil && !*input.Enabled {
-		err = a.objects.deletePrefix(r.Context(), "training/"+sub(r)+"/")
+	for _, id := range removed {
+		if err == nil {
+			err = a.objects.delete(r.Context(), trainingKey(id))
+		}
 	}
 	respond(w, r, http.StatusOK, consent, err)
 }
 
+// putTrainingItem stores wrappedKey (512 bytes) followed by the sealed item, as sent, at
+// training/<id>. The account is recorded only in the database, so turning sharing off can delete it.
 func (a *App) putTrainingItem(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
+	keyVersion, convErr := strconv.Atoi(r.URL.Query().Get("keyVersion"))
+	if err == nil && (convErr != nil || keyVersion < 1 || keyVersion > math.MaxInt32) {
+		err = fail(http.StatusBadRequest, "bad_request", "keyVersion of 1 or more is required")
+	}
 	if err == nil {
-		// Refuse before reading the body; PutTrainingItem checks again under lock.
+		// Refuse before reading the body; PutTrainingItem checks both again under lock.
 		var consent repository.Consent
 		if consent, err = a.repo.Consent(r.Context(), sub(r)); err == nil && !consent.Enabled {
 			err = repository.ErrForbidden
 		}
 	}
-	var input struct {
-		KeyVersion int32  `json:"keyVersion"`
-		WrappedKey string `json:"wrappedKey"`
-		Sealed     string `json:"sealed"`
-	}
 	if err == nil {
-		err = decodeJSON(w, r, base64.StdEncoding.EncodedLen(maxTrainingBytes)+base64.StdEncoding.EncodedLen(wrappedKeyBytes)+jsonSlack, &input)
-	}
-	if err == nil {
-		if wrapped, decodeErr := base64.StdEncoding.DecodeString(input.WrappedKey); input.KeyVersion < 1 || decodeErr != nil || len(wrapped) != wrappedKeyBytes {
-			err = fail(http.StatusBadRequest, "bad_request", "keyVersion of 1 or more and a base64 RSA-4096 wrappedKey are required")
+		var owns bool
+		if owns, err = a.repo.OwnsTrainingItem(r.Context(), sub(r), id); err == nil && !owns {
+			err = repository.ErrForbidden
 		}
 	}
-	var sealed []byte
+	var body []byte
 	if err == nil {
-		sealed, err = decodeSealed(input.Sealed, maxTrainingBytes)
+		body, err = readBody(w, r, wrappedKeyBytes+maxTrainingBytes)
 	}
-	key := trainingKey(sub(r), id)
+	if err == nil && len(body) < wrappedKeyBytes {
+		err = fail(http.StatusBadRequest, "bad_request", "the body must start with a 512-byte RSA-4096 wrapped key")
+	}
 	if err == nil {
-		err = a.objects.put(r.Context(), key, sealed, map[string]string{"key-version": strconv.Itoa(int(input.KeyVersion)), "wrapped-key": input.WrappedKey})
+		err = checkSealed(body[wrappedKeyBytes:])
+	}
+	if err == nil {
+		err = a.repo.PutTrainingItem(r.Context(), sub(r), id, int32(keyVersion), int64(len(body)))
+	}
+	if err == nil {
+		err = a.objects.put(r.Context(), trainingKey(id), body, map[string]string{"key-version": strconv.Itoa(keyVersion)})
 	}
 	if err == nil {
 		// Consent may have been turned off while the item uploaded.
-		if err = a.repo.PutTrainingItem(r.Context(), sub(r), id, input.KeyVersion, int64(len(sealed))); errors.Is(err, repository.ErrForbidden) {
-			_ = a.objects.delete(r.Context(), key)
+		if still, checkErr := a.repo.HasTrainingItem(r.Context(), sub(r), id); checkErr == nil && !still {
+			_ = a.objects.delete(r.Context(), trainingKey(id))
+			err = repository.ErrForbidden
 		}
 	}
 	respond(w, r, http.StatusNoContent, nil, err)
@@ -265,10 +277,14 @@ func (a *App) putTrainingItem(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) deleteTrainingItem(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
+	var owned bool
 	if err == nil {
-		err = a.objects.delete(r.Context(), trainingKey(sub(r), id))
+		owned, err = a.repo.HasTrainingItem(r.Context(), sub(r), id)
 	}
-	if err == nil {
+	if err == nil && owned {
+		err = a.objects.delete(r.Context(), trainingKey(id))
+	}
+	if err == nil && owned {
 		err = a.repo.DeleteTrainingItem(r.Context(), sub(r), id)
 	}
 	respond(w, r, http.StatusNoContent, nil, err)

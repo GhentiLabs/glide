@@ -191,9 +191,10 @@ private struct GhentiSettings: View {
                     if on { Task { await account.setSharing(true) } } else { confirmingShareOff = true }
                 })) {
                     Text("Share my dictations to improve Glide")
-                    Text("Each dictation, its edits and its recording, encrypted so only Ghenti's training system can read them. Ghenti can use them to train Glide's models.")
+                    Text("A copy of each dictation, its edits and its recording, encrypted so only Ghenti's training system can read it. Names and contact details are removed from the text and your account is left out, but the recording keeps your voice. Ghenti uses these copies to train Glide's models.")
                 }
                 .disabled(account.user == nil || account.activity != nil)
+                Link("What's shared and how it's protected", destination: URL(string: "https://ghenti.com/apps/glide/privacy")!)
             }
             .confirmationDialog("Stop sharing?", isPresented: $confirmingShareOff) {
                 Button("Stop Sharing and Delete", role: .destructive) { Task { await account.setSharing(false) } }

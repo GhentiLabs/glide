@@ -24,7 +24,7 @@ On the ghenti-app chart: `command: [/glide-api]`, `migrate: [/glide-api, migrate
 | `AUTH_JWKS_URL` | `https://auth.ghenti.com/jwks` | ES256 keys, refetched on an unknown `kid` |
 | `DATABASE_URL` | | Postgres URL |
 | `DATABASE_CREDENTIALS_FILE` | | `{"username","password"}`, re-read per connection (`/run/secrets/db.json`) |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | region `garage` | Garage bucket for `glide/<sub>/audio/<id>` and `training/<sub>/<id>` |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | region `garage` | Garage bucket for `glide/<sub>/audio/<id>` and `training/<id>` |
 | `S3_CREDENTIALS_FILE` | | `{"access_key_id","secret_access_key"}`, re-read as it rotates (`/run/secrets/s3.json`) |
 | `TRAINING_KEY_URL` | `http://127.0.0.1:8100/v1/transit/keys/glide-training` | OpenBao transit read-key, through the agent proxy |
 

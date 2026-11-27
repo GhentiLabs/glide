@@ -158,21 +158,25 @@ public final class SyncEngine {
 /// Shares dictations for training: each one sealed to Ghenti's training key, which only Ghenti's training job can open.
 public struct TrainingShare: Sendable {
     let api: GlideAPI
-    let sub: String
+    /// Glide's vault key, which keys the training id.
+    let appKey: Data
 
-    public init(api: GlideAPI, sub: String) {
+    public init(api: GlideAPI, appKey: Data) {
         self.api = api
-        self.sub = sub
+        self.appKey = appKey
     }
 
-    /// The same id sent again replaces the earlier copy, so a later correction updates what was shared.
+    /// Anonymizes and seals a record with its recording. Sharing the same record again replaces the earlier copy,
+    /// so a later correction updates what was shared.
     public func share(_ record: DictationRecord, opus: Data?) async throws {
-        struct Payload: Encodable { let record: DictationRecord; let audio: Data? }
         let key = try await api.trainingKey()
-        let item = try TrainingCrypto.seal(
-            try JSONEncoder().encode(Payload(record: record, audio: opus)), id: record.id, sub: sub, publicKeyPEM: key.publicKeyPem)
-        try await api.putTrainingItem(record.id, keyVersion: key.version, item: item)
+        let id = TrainingItem.id(for: record.id, appKey: appKey)
+        let item = try TrainingCrypto.seal(try TrainingItem(anonymizing: record).framed(audio: opus), id: id, publicKeyPEM: key.publicKeyPem)
+        try await api.putTrainingItem(id, keyVersion: key.version, item: item)
     }
+
+    /// Takes back a record's item, as Not a Correction does.
+    public func unshare(_ record: UUID) async throws { try await api.deleteTrainingItem(TrainingItem.id(for: record, appKey: appKey)) }
 
     /// Off deletes everything this person shared.
     @discardableResult
