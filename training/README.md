@@ -180,7 +180,7 @@ GPU, the embedding read from `embed.bin`, the shared prompt opening run once at 
 linear-attention state saved and restored around each guess. It downloads the `.mlpackage`s (1.5 GB with the
 embedding) and compiles them on the Mac. On the made-up test sentences it gives the Python runner's output exactly, with
 and without guesses. Dictations whose prompt and longest allowed reply pass 512 positions (about 95 words) go out as
-transcribed, until the model is reconverted with a larger MAX. MLX is gone from the app.
+transcribed, until the model is reconverted with a larger MAX. MLX is used only for nightly training.
 
 ## On-device training (design)
 
@@ -192,15 +192,15 @@ dictations and corrections:
   them against the reference with 1 - WER, raise the log-probability of the better ones. It needs no TDT loss,
   which parakeet-mlx doesn't have. `asr/mlx_probe.py` runs one step: on an M1 Pro (16 GB) a 15 s clip takes
   about 2.5 s at 5.5 GB peak, so 200 clips is under 10 minutes, run while the Mac is idle and charging.
-- **Cleanup model**: paused since the app moved to Core ML (28 Nov 2026), which can't train; it returns once training
-  runs on our own Swift model code and writes the add-on into the Core ML packages. The MLX version, kept in
-  `~/glide-data/archive/mlx-cleaner`, worked like this: once a day, when macOS finds the Mac idle (`NSBackgroundActivityScheduler`), the app trains a
-  LoRA add-on in MLX Swift on the transcript and the text the user kept (`Labeller.cleanupPairs`). It uses edits that only
-  fix cleanup, formatting or words the model wrongly dropped, plus up to twice as many dictations kept as pasted. It
-  needs at least 5 corrections. Every fifth pair is held out, and the add-on is kept only if it lowers word edits on
-  those against the current model. Dictations skip the model while it trains. For now it trains only the last layer:
-  Qwen3.5's linear-attention kernel has no gradient in mlx-swift-lm 3.31.4, and the fix (3.32.3+) needs Xcode 26.4.
-  On made-up pairs where the base model keeps a leading "Um", that layer barely helped (held-out edits 11 → 10).
+- **Cleanup model**: once a day, when macOS finds the Mac idle (`NSBackgroundActivityScheduler`), `Cleaner/Trainer.swift`
+  trains a rank-8 LoRA add-on in every projection, in MLX Swift, on the transcript and the text the user kept
+  (`Labeller.cleanupPairs`). It trains over the very int8 weights the Neural Engine runs, read from the packages'
+  `weight.bin` through `train.json` (written by `coreml/export_train.py`), so nothing extra is downloaded, and it
+  predicts the same tokens as the Neural Engine. Every fifth pair is held out. The add-on goes into the LoRA slots of a
+  cloned copy of the packages, which is compiled and kept only if it lowers word edits on the held-out pairs. On 20
+  made-up pairs from someone who never ends with punctuation, held-out edits went 13 → 1 in 118 s (5 epochs, lr 2e-5)
+  in a debug build on an M1 Pro, with free memory never below 25%. MLX's buffer cache is capped at 512 MB and the trainer
+  is freed before the tuned model compiles; uncapped, a run grew by gigabytes.
 - The two can't train as one network, since text passes between them, but they train from the same log, each
   toward its own target. A new add-on is kept only if it beats the current one on the user's most recent held-out
   dictations, as `rl_loop.sh` does; otherwise it's discarded. Add-ons are small files, so rolling back is free.

@@ -22,6 +22,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.4"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.4"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.4.0"),
     ],
     targets: [
@@ -34,6 +35,7 @@ let package = Package(
         .target(name: "Refiner", dependencies: ["GlideCore"]),
         .target(name: "Cleaner", dependencies: [
             "GlideCore",
+            .product(name: "MLX", package: "mlx-swift"),
             .product(name: "Tokenizers", package: "swift-transformers"),
         ]),
         .target(name: "Store", dependencies: ["GlideCore"]),
@@ -47,7 +49,7 @@ let package = Package(
         .testTarget(name: "AudioCaptureTests", dependencies: ["AudioCapture"]),
         .testTarget(name: "OverlayTests", dependencies: ["Overlay"]),
         .testTarget(name: "RefinerTests", dependencies: ["Refiner", "GlideCore"]),
-        .testTarget(name: "CleanerTests", dependencies: ["Cleaner"]),
+        .testTarget(name: "CleanerTests", dependencies: ["Cleaner", .product(name: "MLX", package: "mlx-swift")]),
         .testTarget(name: "StoreTests", dependencies: ["Store", "GlideCore"]),
         .testTarget(name: "InserterTests", dependencies: ["Inserter"]),
         .testTarget(name: "EditTrackerTests", dependencies: ["EditTracker", "GlideCore"]),

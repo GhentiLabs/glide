@@ -11,6 +11,7 @@ import functools
 import sys
 
 import coremltools as ct
+import coremltools.models.utils as ct_utils
 import numpy as np
 import torch
 import torch.nn as nn
@@ -38,6 +39,14 @@ class Head(nn.Module):
         return (where.gather(-1, part).squeeze(-1) + part.squeeze(-1) * self.rows).to(torch.int32).unsqueeze(0)
 
 
+def pipeline():
+    """The default passes without const_deduplication, which would merge the all-zero LoRA B slots into one blob. A fresh
+    one per conversion: a conversion changes the pipeline it is given (the next one lost its fp16 casts)."""
+    p = ct.PassPipeline.DEFAULT
+    p.remove_passes(["common::const_deduplication"])
+    return p
+
+
 def save(ml, out, bits, lora=()):
     consts = [op for f in ml._mil_program.functions.values() for op in f.operations if op.op_type == "const"]
     # Only weights read by linear ops: 8-bit embeddings, convs and gains broke greedy output (it never stopped).
@@ -46,7 +55,13 @@ def save(ml, out, bits, lora=()):
         cfg = ct.optimize.coreml.OptimizationConfig(
             global_config=ct.optimize.coreml.OpLinearQuantizerConfig(mode="linear_symmetric", granularity="per_channel"),
             op_name_configs={n: None for n in skip})
-        ml = ct.optimize.coreml.linear_quantize_weights(ml, cfg)
+        # Quantizing converts the program again with the default passes; give that conversion ours instead.
+        convert_again = ct_utils._mil_convert
+        ct_utils._mil_convert = lambda *a, **k: convert_again(*a, pass_pipeline=pipeline(), **k)
+        try:
+            ml = ct.optimize.coreml.linear_quantize_weights(ml, cfg)
+        finally:
+            ct_utils._mil_convert = convert_again
     ml.save(out)
 
 
@@ -57,9 +72,6 @@ def convert(model_dir, prefix, K=16, MAX=512, bits=16):
     ex = (torch.zeros(K, m.embed.shape[1]), *inputs_for(list(range(K)), K, K, MAX))
     names = ["x", "cos", "sin", "mask", "write", "active", "pick"]
     inputs = [ct.TensorType(name=n, shape=t.shape, dtype=np.float16) for n, t in zip(names, ex)]
-    # Identical consts get merged by default, which would make the per-layer LoRA slots share one blob.
-    pipeline = ct.PassPipeline.DEFAULT
-    pipeline.remove_passes(["common::const_deduplication"])
     n_lora = 0
     for part, (start, stop) in enumerate([(0, 12), (12, len(m.layers))]):
         m.forward = functools.partial(m.body, start=start, stop=stop)
@@ -69,7 +81,7 @@ def convert(model_dir, prefix, K=16, MAX=512, bits=16):
                   for n in m.states_in(start, stop)]
         ml = ct.convert(traced, inputs=inputs, states=states, outputs=[ct.TensorType(name="h", dtype=np.float16)],
                         minimum_deployment_target=ct.target.macOS15, compute_precision=ct.precision.FLOAT16,
-                        pass_pipeline=pipeline, skip_model_load=True)
+                        pass_pipeline=pipeline(), skip_model_load=True)
         lora = [op.name for f in ml._mil_program.functions.values() for op in f.operations if op.op_type == "const" and "lora" in op.name]
         n_lora += len(lora)
         save(ml, f"{prefix}-body{part}.mlpackage", bits, lora)

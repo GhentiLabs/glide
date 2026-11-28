@@ -45,7 +45,7 @@ final class NeuralEngine {
     /// Greedy cleanup of `text`, nil when the prompt and the longest allowed reply don't fit in the cache.
     func generate(_ text: String, speculate: Bool = true) throws -> String? {
         let ids = try promptIDs(text)
-        let draft = tokenizer.encode(text: text, addSpecialTokens: false).map(Int32.init)
+        let draft = tokens(text)
         // Room for numbers and punctuation, never for an essay.
         let budget = 2 * draft.count + 50
         // shortcut: about 95 words fit in 512 positions, longer dictations go out as transcribed; reconvert with a larger MAX when that matters.
@@ -91,6 +91,10 @@ final class NeuralEngine {
             messages: [["role": "system", "content": Cleaner.system], ["role": "user", "content": text]],
             tools: nil, additionalContext: ["enable_thinking": false]
         ).map(Int32.init)
+    }
+
+    func tokens(_ text: String) -> [Int32] {
+        tokenizer.encode(text: text, addSpecialTokens: false).map(Int32.init)
     }
 
     private func key(_ token: Int32) -> String {
