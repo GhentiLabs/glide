@@ -15,9 +15,9 @@ public actor SpeechRecognizer: GlideCore.Recognizer {
 
     public func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
         guard manager == nil else { return }
-        if !FluidSpeechPro.isInstalled(at: directory) {
+        if !FluidSpeechPro.model.isInstalled(at: directory) {
             // Downloading is most of the wait; loading for the Neural Engine takes the rest the first time.
-            try await FluidSpeechPro.download(to: directory) { progress(0.95 * $0) }
+            try await FluidSpeechPro.model.download(to: directory) { progress(0.95 * $0) }
         }
         // Same contract as Parakeet Ultra, which Fluid Speech Pro is built on: FluidAudio decodes it as v3.
         let models = try AsrModels.loadLocal(from: directory, version: .ultra)

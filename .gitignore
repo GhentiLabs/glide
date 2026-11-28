@@ -38,3 +38,6 @@ build/
 Glide.xcodeproj/
 Packages/GlideKit/.swiftpm/
 !Glide/Assets.xcassets/**/*.png
+
+# Python
+__pycache__/

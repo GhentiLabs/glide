@@ -45,6 +45,8 @@ targets:
       - package: GlideKit
         product: Refiner
       - package: GlideKit
+        product: Cleaner
+      - package: GlideKit
         product: Store
       - package: GlideKit
         product: FieldContext
