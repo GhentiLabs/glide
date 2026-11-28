@@ -60,6 +60,8 @@ final class AppModel {
     @ObservationIgnored private let recorder = AudioRecorder()
     @ObservationIgnored private let recognizer = SpeechRecognizer()
     @ObservationIgnored private let cleaner = Cleaner()
+    /// Lets macOS pick an idle time each day to tune the cleanup model on the user's corrections.
+    @ObservationIgnored private let nightly = NSBackgroundActivityScheduler(identifier: "com.ghentilabs.glide.cleanup-learning")
     @ObservationIgnored private let cues = Cues()
     @ObservationIgnored private let guide = PermissionGuide()
     @ObservationIgnored private var listener: HotkeyListener?
@@ -115,6 +117,7 @@ final class AppModel {
         Telemetry.event("app_launched")
         boost(store.dictionary)
         Task { await loadModel() }
+        scheduleLearning()
         await waitForAccessibility()
     }
 
@@ -136,6 +139,33 @@ final class AppModel {
         do { try await cleaner.prepare { _ in } } catch {
             log.error("cleanup model load failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Once a day, while the Mac is idle, trains the cleanup model's add-on on this Mac. Nothing leaves it.
+    private func scheduleLearning() {
+        nightly.repeats = true
+        nightly.interval = 24 * 60 * 60
+        nightly.tolerance = 6 * 60 * 60
+        nightly.qualityOfService = .utility
+        nightly.schedule { [weak self] done in
+            Task { @MainActor in
+                guard let self else { return done(.finished) }
+                await self.learnCleanup()
+                done(self.nightly.shouldDefer ? .deferred : .finished)
+            }
+        }
+    }
+
+    private func learnCleanup() async {
+        guard UserDefaults.standard.object(forKey: "learnFromEdits") as? Bool ?? true else { return }
+        let pairs = Labeller.cleanupPairs(from: store.records).map { Cleaner.Pair(input: $0.input, target: $0.target) }
+        guard !pairs.isEmpty else { return }
+        nonisolated(unsafe) let nightly = nightly  // shouldDefer may be read from any thread
+        guard let report = await cleaner.learn(from: pairs, shouldStop: { nightly.shouldDefer }) else { return }
+        log.notice("""
+            cleanup learning: \(report.trained) pairs, held-out edits \(report.before) → \(report.after), \
+            \(report.kept ? "kept" : "discarded", privacy: .public)
+            """)
     }
 
     /// The event tap needs Accessibility. Setup asks for it; after setup a toast offers the guide.

@@ -9,9 +9,12 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      # MLX's GPU kernels need the Metal toolchain, and only xcodebuild bundles them for tests.
+      - name: Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
       - name: Package tests
         working-directory: Packages/GlideKit
-        run: swift test
+        run: xcodebuild -scheme GlideKit-Package -destination 'platform=macOS' -derivedDataPath ../../build/pkg test -quiet
       - name: Build the app unsigned
         run: |
           brew install xcodegen
