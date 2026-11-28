@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "Inserter", targets: ["Inserter"]),
         .library(name: "Overlay", targets: ["Overlay"]),
         .library(name: "Refiner", targets: ["Refiner"]),
+        .library(name: "Cleaner", targets: ["Cleaner"]),
         .library(name: "Store", targets: ["Store"]),
         .library(name: "FieldContext", targets: ["FieldContext"]),
         .library(name: "EditTracker", targets: ["EditTracker"]),
@@ -21,6 +22,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.4"),
+        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.4.0"),
     ],
     targets: [
         .target(name: "GlideCore"),
@@ -30,6 +32,10 @@ let package = Package(
         .target(name: "Inserter"),
         .target(name: "Overlay", dependencies: ["GlideCore"]),
         .target(name: "Refiner", dependencies: ["GlideCore"]),
+        .target(name: "Cleaner", dependencies: [
+            "GlideCore",
+            .product(name: "Tokenizers", package: "swift-transformers"),
+        ]),
         .target(name: "Store", dependencies: ["GlideCore"]),
         .target(name: "FieldContext", dependencies: ["GlideCore"]),
         .target(name: "EditTracker", dependencies: ["GlideCore"]),
@@ -41,6 +47,7 @@ let package = Package(
         .testTarget(name: "AudioCaptureTests", dependencies: ["AudioCapture"]),
         .testTarget(name: "OverlayTests", dependencies: ["Overlay"]),
         .testTarget(name: "RefinerTests", dependencies: ["Refiner", "GlideCore"]),
+        .testTarget(name: "CleanerTests", dependencies: ["Cleaner"]),
         .testTarget(name: "StoreTests", dependencies: ["Store", "GlideCore"]),
         .testTarget(name: "InserterTests", dependencies: ["Inserter"]),
         .testTarget(name: "EditTrackerTests", dependencies: ["EditTracker", "GlideCore"]),

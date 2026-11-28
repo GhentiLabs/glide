@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AudioCapture
+import Cleaner
 import CryptoKit
 import EditTracker
 import FieldContext
@@ -14,7 +15,7 @@ import Refiner
 import Store
 import os
 
-/// Runs Glide: hotkey → microphone → Fluid Speech Pro → rules → paste → edit tracking, plus the state every window reads.
+/// Runs Glide: hotkey → microphone → Fluid Speech Pro → cleanup model → rules → paste → edit tracking, plus the state every window reads.
 @MainActor @Observable
 final class AppModel {
     let store = Store(directory: Store.defaultDirectory)
@@ -58,6 +59,7 @@ final class AppModel {
     @ObservationIgnored private lazy var barPanel = BarPanel(model: bar)
     @ObservationIgnored private let recorder = AudioRecorder()
     @ObservationIgnored private let recognizer = SpeechRecognizer()
+    @ObservationIgnored private let cleaner = Cleaner()
     @ObservationIgnored private let cues = Cues()
     @ObservationIgnored private let guide = PermissionGuide()
     @ObservationIgnored private var listener: HotkeyListener?
@@ -128,6 +130,11 @@ final class AppModel {
         } catch {
             log.error("model load failed: \(error.localizedDescription, privacy: .public)")
             modelFailed = true
+            return
+        }
+        // Dictation works without it: text goes out as transcribed until it loads.
+        do { try await cleaner.prepare { _ in } } catch {
+            log.error("cleanup model load failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -271,12 +278,13 @@ final class AppModel {
             log.notice("recognizer returned no text")
             return show(.error(.nothingHeard))
         }
+        let cleaned = await cleaner.clean(raw)
         let field = await snapshot?.value
         let smart = UserDefaults.standard.object(forKey: "smartSpacing") as? Bool ?? true
-        let text = smart && field?.isSecure == false ? Refiner.join(raw, after: field?.before, isCommonWord: Self.isCommonWord) : raw
+        let text = smart && field?.isSecure == false ? Refiner.join(cleaned, after: field?.before, isCommonWord: Self.isCommonWord) : cleaned
         let record = DictationRecord(app: field?.bundleID ?? frontApp, rawTranscript: raw, refinedText: text.trimmingCharacters(in: .whitespaces))
         store.add(record)
-        lastTranscript = raw
+        lastTranscript = cleaned
 
         if field?.isSecure == true {
             skip(record.id, .passwordField)
