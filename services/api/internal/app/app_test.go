@@ -477,13 +477,14 @@ func TestDeleteAllSynced(t *testing.T) {
 
 func TestTrainingConsentGatesItems(t *testing.T) {
 	env := newEnv(t)
-	alice := env.as(t, "alice")
-	wrapped := base64.StdEncoding.EncodeToString(sealed(512))
-	item := func(sealedBytes []byte) map[string]any {
-		return map[string]any{"keyVersion": 2, "wrappedKey": wrapped, "sealed": base64.StdEncoding.EncodeToString(sealedBytes)}
+	alice, bob := env.as(t, "alice"), env.as(t, "bob")
+	wrapped := sealed(512)
+	item := func(sealedBytes []byte) []byte { return append(append([]byte{}, wrapped...), sealedBytes...) }
+	put := func(token, id string, body []byte) *httptest.ResponseRecorder {
+		return env.do(t, token, "PUT", "/v1/training/items/"+id+"?keyVersion=2", body)
 	}
 
-	forbidden := env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(64)))
+	forbidden := put(alice, id1, item(sealed(64)))
 	expect(t, forbidden, http.StatusForbidden)
 	if decode[map[string]string](t, forbidden)["error"] != "forbidden" {
 		t.Fatal(forbidden.Body.String())
@@ -498,33 +499,47 @@ func TestTrainingConsentGatesItems(t *testing.T) {
 		t.Fatal("turning consent on again moved since")
 	}
 
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, map[string]any{"keyVersion": 2, "wrappedKey": "AAAA", "sealed": base64.StdEncoding.EncodeToString(sealed(64))}), http.StatusBadRequest)
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(64))), http.StatusNoContent)
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(70))), http.StatusNoContent)
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id2, item(sealed(8<<20))), http.StatusNoContent)
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id3, item(sealed(8<<20+1))), http.StatusRequestEntityTooLarge)
-	key := "training/alice/" + id1
-	if len(env.s3.objects[key]) != 70 || env.s3.meta[key].Get("X-Amz-Meta-Key-Version") != "2" || env.s3.meta[key].Get("X-Amz-Meta-Wrapped-Key") != wrapped {
+	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(64))), http.StatusBadRequest) // no keyVersion
+	expect(t, put(alice, id1, sealed(100)), http.StatusBadRequest)                                            // no wrapped key
+	expect(t, put(alice, id1, item(sealed(64))), http.StatusNoContent)
+	expect(t, put(alice, id1, item(sealed(70))), http.StatusNoContent)
+	expect(t, put(alice, id2, item(sealed(8<<20))), http.StatusNoContent)
+	expect(t, put(alice, id3, item(sealed(8<<20+1))), http.StatusRequestEntityTooLarge)
+	// Stored as sent, with no account in the path.
+	key := "training/" + id1
+	if !bytes.Equal(env.s3.objects[key][:512], wrapped) || len(env.s3.objects[key]) != 512+70 || env.s3.meta[key].Get("X-Amz-Meta-Key-Version") != "2" {
 		t.Fatalf("stored item: %d bytes, meta %v", len(env.s3.objects[key]), env.s3.meta[key])
+	}
+	if keys := env.s3.keys("training/alice"); len(keys) != 0 {
+		t.Fatalf("account in object keys: %v", keys)
 	}
 	if account := decode[repository.Account](t, env.do(t, alice, "GET", "/v1/account", nil)); account.Training.Items != 2 {
 		t.Fatalf("training = %+v", account.Training)
+	}
+
+	// An id belongs to whoever shared it first: another account can neither replace nor delete it.
+	expect(t, env.do(t, bob, "PUT", "/v1/training/consent", map[string]bool{"enabled": true}), http.StatusOK)
+	expect(t, put(bob, id1, item(sealed(80))), http.StatusForbidden)
+	expect(t, env.do(t, bob, "DELETE", "/v1/training/items/"+id1, nil), http.StatusNoContent)
+	if len(env.s3.objects[key]) != 512+70 {
+		t.Fatal("another account changed the item")
 	}
 
 	expect(t, env.do(t, alice, "DELETE", "/v1/training/items/"+id1, nil), http.StatusNoContent)
 	if _, ok := env.s3.objects[key]; ok {
 		t.Fatal("deleted item still stored")
 	}
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(64))), http.StatusNoContent)
+	expect(t, put(alice, id1, item(sealed(64))), http.StatusNoContent)
+	expect(t, put(bob, id3, item(sealed(64))), http.StatusNoContent)
 
 	off := decode[repository.Consent](t, env.do(t, alice, "PUT", "/v1/training/consent", map[string]bool{"enabled": false}))
 	if off.Enabled || off.Since != nil || off.Items != 0 {
 		t.Fatalf("consent off = %+v", off)
 	}
-	if keys := env.s3.keys("training/alice/"); len(keys) != 0 {
-		t.Fatalf("items left after consent off: %v", keys)
+	if keys := env.s3.keys("training/"); len(keys) != 1 || keys[0] != "training/"+strings.ToLower(id3) {
+		t.Fatalf("after alice turned sharing off: %v", keys)
 	}
-	expect(t, env.do(t, alice, "PUT", "/v1/training/items/"+id1, item(sealed(64))), http.StatusForbidden)
+	expect(t, put(alice, id1, item(sealed(64))), http.StatusForbidden)
 	expect(t, env.do(t, alice, "PUT", "/v1/training/consent", map[string]any{}), http.StatusBadRequest)
 }
 

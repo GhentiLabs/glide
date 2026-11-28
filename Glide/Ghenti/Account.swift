@@ -141,21 +141,24 @@ final class Account {
 
     // MARK: Training
 
-    /// On shares each new dictation once its edits are in; off deletes everything shared.
+    /// On shares each new dictation once its edits are in, and asks for the vault key first, which keys
+    /// the anonymous training ids. Off deletes everything shared.
     func setSharing(_ on: Bool) async {
+        if on && !hasKey { await unlock() }
+        guard !on || hasKey else { return }
         await run(on ? nil : "Deleting what you shared.") {
-            _ = try await TrainingShare(api: api, sub: user?.sub ?? "").setConsent(on)
+            _ = try await api.setTrainingConsent(on)
             UserDefaults.standard.set(on, forKey: "shareForTraining")
         }
     }
 
-    /// Shares a settled dictation, with its recording, unless the person ruled it out.
+    /// Shares a settled dictation, anonymized, with its recording, unless the person ruled it out.
     func share(_ id: UUID) {
-        guard sharesForTraining, let sub = user?.sub, let record = store.records.first(where: { $0.id == id }), record.excluded != true
+        guard sharesForTraining, user != nil, let record = store.records.first(where: { $0.id == id }), record.excluded != true
         else { return }
-        let share = TrainingShare(api: api, sub: sub)
         let opus = audio.load(id)
         Task {
+            guard let share = await training() else { return }
             do { try await share.share(record, opus: opus) } catch {
                 log.error("training share failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -165,8 +168,12 @@ final class Account {
     /// Not a Correction takes a shared dictation back.
     func unshare(_ id: UUID) {
         guard sharesForTraining, user != nil else { return }
-        let api = api
-        Task { try? await api.deleteTrainingItem(id) }
+        Task { try? await training()?.unshare(id) }
+    }
+
+    private func training() async -> TrainingShare? {
+        guard let key = await session.appKey else { return nil }
+        return TrainingShare(api: api, appKey: key.key)
     }
 
     // MARK: Helpers

@@ -53,8 +53,8 @@ func fileCredentials(path string) aws.CredentialsProviderFunc {
 	}
 }
 
-func audioKey(sub, id string) string    { return "glide/" + sub + "/audio/" + id }
-func trainingKey(sub, id string) string { return "training/" + sub + "/" + id }
+func audioKey(sub, id string) string { return "glide/" + sub + "/audio/" + id }
+func trainingKey(id string) string   { return "training/" + id }
 
 func (o *objects) put(ctx context.Context, key string, body []byte, metadata map[string]string) error {
 	_, err := o.client.PutObject(ctx, &s3.PutObjectInput{

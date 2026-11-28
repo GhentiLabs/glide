@@ -61,7 +61,8 @@ public enum TrainingCrypto {
 
     public enum TrainingError: Error { case badPublicKey, wrapFailed }
 
-    public static func seal(_ plaintext: Data, id: UUID, sub: String, publicKeyPEM: String) throws -> Item {
+    /// `id` is the training id; no account goes into the item, its AAD or its storage path.
+    public static func seal(_ plaintext: Data, id: UUID, publicKeyPEM: String) throws -> Item {
         let publicKey = try rsaPublicKey(pem: publicKeyPEM)
         let itemKey = SymmetricKey(size: .bits256)
         let raw = itemKey.withUnsafeBytes { Data($0) }
@@ -69,7 +70,7 @@ public enum TrainingCrypto {
         guard let wrapped = SecKeyCreateEncryptedData(publicKey, .rsaEncryptionOAEPSHA256, raw as CFData, &error) as Data? else {
             throw TrainingError.wrapFailed
         }
-        let aad = Data("glide/v1|training|\(sub)|\(id.uuidString.lowercased())".utf8)
+        let aad = Data("glide/v1|training|\(id.uuidString.lowercased())".utf8)
         return Item(wrappedKey: wrapped, sealed: try SyncCrypto.seal(plaintext, key: itemKey, aad: aad))
     }
 

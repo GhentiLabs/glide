@@ -23,11 +23,21 @@ info:
     A record's plaintext is the app's DictationRecord as JSON (text, edits, labels; no audio).
     Audio plaintext is the dictation's recording as Opus in a CAF container.
 
-    Training is opt-in and readable by Ghenti. Each item is sealed with a fresh 32-byte key, and that key is
+    Training is opt-in and readable by Ghenti. The app anonymizes each item before sealing it: names,
+    places, organizations, email addresses, phone numbers, street addresses, links and long numbers in the
+    text become placeholders such as <NAME_1>; the app becomes a category; there is no time, no account and
+    no record id. The recording is kept as is. Each item is sealed with a fresh 32-byte key, and that key is
     encrypted with RSA-OAEP-SHA-256 to the public half of the OpenBao transit key `glide-training`. Only the
     training job's identity may call transit decrypt. This API stores items without being able to read them.
-      sealed      = 0x01 | nonce (12) | AES-256-GCM ciphertext | tag (16), AAD "glide/v1|training|<sub>|<id>"
-      plaintext   = JSON { "record": DictationRecord, "audio": base64 Opus/CAF or null }
+      id          = a training id: HMAC-SHA256(key: HKDF-SHA256(appKey, info "glide/v1/training-id"), "<record id>"),
+                    first 16 bytes as a UUID, so a later edit replaces the item but it can't be matched to the record
+      body        = wrappedKey (512 bytes, RSA-OAEP-SHA-256 of the item key) | sealed
+      sealed      = 0x01 | nonce (12) | AES-256-GCM ciphertext | tag (16), AAD "glide/v1|training|<id>"
+      plaintext   = JSON length (4 bytes, big-endian) | JSON TrainingItem | Opus/CAF recording (may be empty)
+      TrainingItem = { "version": 1, "category": "email"|"chat"|"code"|"document"|"other", "rawTranscript",
+                       "pastedText", "finalText"?, "edits": [{ "before", "after", "kind" }], "verdict" }
+    Items are stored at training/<id> with no account in the path. The database keeps which account
+    shared an id only so that turning sharing off can delete them; the training job reads items by id.
 servers:
   - url: https://glide.ghenti.com/v1
 security:
@@ -179,21 +189,19 @@ paths:
 
   /training/items/{id}:
     parameters:
-      - { name: id, in: path, required: true, schema: { type: string, format: uuid, description: The record's id } }
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid, description: The training id }
     put:
       operationId: putTrainingItem
-      description: Refused with 403 unless consent is on. Sending the same id again replaces the item (a later edit).
+      description: >
+        Refused with 403 unless consent is on, or when another account already shared this id.
+        Sending the same id again replaces the item (a later edit).
+      parameters:
+        - { name: keyVersion, in: query, required: true, schema: { type: integer, minimum: 1 } }
       requestBody:
         required: true
         content:
-          application/json:
-            schema:
-              type: object
-              required: [keyVersion, wrappedKey, sealed]
-              properties:
-                keyVersion: { type: integer, minimum: 1 }
-                wrappedKey: { type: string, contentEncoding: base64, description: RSA-OAEP-SHA-256 of the item key }
-                sealed: { type: string, contentEncoding: base64, description: "At most 8 MiB decoded" }
+          application/octet-stream:
+            schema: { type: string, format: binary, description: "wrappedKey (512 bytes) | sealed (at most 8 MiB)" }
       responses:
         "204": { description: Stored }
         default: { $ref: "#/components/responses/Error" }

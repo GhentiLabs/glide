@@ -46,9 +46,9 @@ import Testing
         let spki = Data([0x30]) + derLength(header.count + bitString.count) + Data(header) + bitString
         let pem = "-----BEGIN PUBLIC KEY-----\n" + spki.base64EncodedString(options: .lineLength64Characters) + "\n-----END PUBLIC KEY-----\n"
 
-        let item = try TrainingCrypto.seal(Data("shared".utf8), id: id, sub: "u", publicKeyPEM: pem)
+        let item = try TrainingCrypto.seal(Data("shared".utf8), id: id, publicKeyPEM: pem)
         let raw = try #require(SecKeyCreateDecryptedData(privateKey, .rsaEncryptionOAEPSHA256, item.wrappedKey as CFData, nil) as Data?)
-        let aad = Data("glide/v1|training|u|\(id.uuidString.lowercased())".utf8)
+        let aad = Data("glide/v1|training|\(id.uuidString.lowercased())".utf8)
         #expect(try SyncCrypto.open(item.sealed, key: SymmetricKey(data: raw), aad: aad) == Data("shared".utf8))
     }
 

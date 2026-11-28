@@ -80,8 +80,8 @@ public struct GlideAPI: Sendable {
     }
 
     public func putTrainingItem(_ id: UUID, keyVersion: Int, item: TrainingCrypto.Item) async throws {
-        struct Body: Encodable { let keyVersion: Int; let wrappedKey: Data; let sealed: Data }
-        try await empty("PUT", "training/items/\(id.uuidString.lowercased())", json: Body(keyVersion: keyVersion, wrappedKey: item.wrappedKey, sealed: item.sealed))
+        // Raw bytes, not base64 in JSON, so a recording uploads at its own size.
+        try await empty("PUT", "training/items/\(id.uuidString.lowercased())", query: ["keyVersion": String(keyVersion)], raw: item.wrappedKey + item.sealed)
     }
 
     public func deleteTrainingItem(_ id: UUID) async throws {
@@ -95,8 +95,8 @@ public struct GlideAPI: Sendable {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func empty(_ method: String, _ path: String, json: (any Encodable)? = nil, raw: Data? = nil) async throws {
-        _ = try await send(method, path, json: json, raw: raw)
+    private func empty(_ method: String, _ path: String, query: [String: String] = [:], json: (any Encodable)? = nil, raw: Data? = nil) async throws {
+        _ = try await send(method, path, query: query, json: json, raw: raw)
     }
 
     private func send(_ method: String, _ path: String, query: [String: String] = [:], json: (any Encodable)? = nil, raw: Data? = nil)
